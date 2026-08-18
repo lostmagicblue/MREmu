@@ -1,10 +1,6 @@
 #include <iostream>
 #include <thread>
-#include <vector>
-#include <filesystem>
-
-#include "imgui.h"
-#include "imgui-SFML.h"
+#include <exception>
 
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
@@ -26,8 +22,6 @@
 #include <cmdparser.hpp>
 
 #include "NativeApps/Menu/AppSelector.h"
-
-namespace fs = std::filesystem;
 
 sf::Clock global_clock;
 
@@ -61,6 +55,7 @@ Java_com_ximikboda_mremu_MainActivity_nativeLoadVxpFile(JNIEnv *env, jobject thi
 }
 #endif
 
+// 增强子线程防闪退处理
 void mre_main(AppManager* appManager_p) {
 	AppManager& appManager = *appManager_p;
 
@@ -68,8 +63,18 @@ void mre_main(AppManager* appManager_p) {
 	while (work) {
 		uint32_t delta_ms = deltaClock.restart().asMilliseconds();
 
-		GDB::update();
-		appManager.update(delta_ms);
+		try {
+			GDB::update();
+			appManager.update(delta_ms);
+		}
+		catch (const std::exception& e) {
+			spdlog::error("[CRASH PREVENTED] Exception in MRE main loop: {}", e.what());
+			std::cout << "[ERROR] Exception caught in MRE core: " << e.what() << std::endl;
+		}
+		catch (...) {
+			spdlog::error("[CRASH PREVENTED] Unknown exception/signal caught in MRE core execution.");
+			std::cout << "[ERROR] Unknown crash prevented in MRE runtime loop." << std::endl;
+		}
 
 		sf::sleep(sf::milliseconds(1000 / 120));
 	}
@@ -123,16 +128,11 @@ int main(int argc, char** argv) {
 	MREngine::AppAudio::init();
 	MREngine::Graphic graphic;
 
-#ifndef ANDROID
-	sf::RenderWindow win_debug(sf::VideoMode(340, 720), "MREmu Phone Container");
+	// 只创建设备主窗口，移除调试窗口
 	sf::RenderWindow win_device(sf::VideoMode(graphic.width, graphic.height + 208), "MREmu Device");
-	ImGui::SFML::Init(win_debug);
-	win_debug.setFramerateLimit(60);
-	win_device.setFramerateLimit(60);
-#else
-	sf::RenderWindow win_device(sf::VideoMode::getDesktopMode(), "MREmu");
 	win_device.setFramerateLimit(60);
 
+#ifdef ANDROID
 	while (win_device.isOpen()) {
 		sf::Event event;
 		while (win_device.pollEvent(event)) {
@@ -166,14 +166,22 @@ int main(int argc, char** argv) {
 
 	if (app_path.size()) {
 		if (fs::exists(app_path) || path_is_local) {
-			appManager.add_app_for_launch(app_path, path_is_local);
+			try {
+				appManager.add_app_for_launch(app_path, path_is_local);
+			} catch (const std::exception& e) {
+				spdlog::error("Failed to launch VXP: {}", e.what());
+				std::cout << "[ERROR] Cannot open VXP file: " << app_path << " | Reason: " << e.what() << std::endl;
+				appManager.add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
+			}
 		} else {
-			error_message = "VXP file does not exist:\n" + app_path;
-			show_error = true;
+			spdlog::error("VXP file does not exist: {}", app_path);
+			std::cout << "[ERROR] VXP file does not exist: " << app_path << std::endl;
+			appManager.add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
 		}
 	}
-	else
+	else {
 		appManager.add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
+	}
 
 	int scale = 1;
 	sf::Sprite screen_sp(graphic.screen_tex);
@@ -200,49 +208,13 @@ int main(int argc, char** argv) {
 	sf::Clock deltaClock;
 	sf::Event event;
 
-	// 自动扫描本地 mre 文件夹中的 .vxp 文件
-	std::vector<std::string> mre_files;
-	auto rescan_mre_dir = [&]() {
-		mre_files.clear();
-		if (fs::exists("mre") && fs::is_directory("mre")) {
-			for (const auto& entry : fs::directory_iterator("mre")) {
-				if (entry.path().extension() == ".vxp") {
-					mre_files.push_back(entry.path().string());
-				}
-			}
-		}
-	};
-	rescan_mre_dir();
-
-	while (win_device.isOpen()
-#ifndef ANDROID
-        && win_debug.isOpen()
-#endif
-    ) {
-#ifndef ANDROID
-		while (win_debug.pollEvent(event)) {
-			ImGui::SFML::ProcessEvent(event);
-			switch (event.type) {
-			case sf::Event::Closed:
-				win_debug.close();
-				win_device.close();
-				break;
-			case sf::Event::Resized:
-				win_debug.setView(sf::View(sf::FloatRect(0.f, 0.f, (float)event.size.width, (float)event.size.height)));
-				break;
-			}
-		}
-#endif
-
+	while (win_device.isOpen()) {
 		while (win_device.pollEvent(event)) {
 			keyboard.event(event);
 			touch.sf_event(event);
 			switch (event.type) {
 			case sf::Event::Closed:
 				win_device.close();
-#ifndef ANDROID
-				win_debug.close();
-#endif
 				break;
             case sf::Event::Resized:
                 win_device.setView(sf::View(sf::FloatRect(0.f, 0.f, (float)event.size.width, (float)event.size.height)));
@@ -251,71 +223,12 @@ int main(int argc, char** argv) {
 			}
 		}
 
-#ifndef ANDROID
-		ImGui::SFML::Update(win_debug, deltaClock.restart());
-
-		if (show_error) {
-			ImGui::OpenPopup("VXP Error");
-			show_error = false;
+		try {
+			graphic.update_screen();
+		} catch (const std::exception& e) {
+			spdlog::error("[GRAPHIC ERROR] {}", e.what());
+			std::cout << "[ERROR] Screen update error: " << e.what() << std::endl;
 		}
-		if (ImGui::BeginPopupModal("VXP Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::Text("%s", error_message.c_str());
-			if (ImGui::Button("OK", ImVec2(120, 0))) {
-				ImGui::CloseCurrentPopup();
-			}
-			ImGui::EndPopup();
-		}
-#endif
-
-		graphic.update_screen();
-
-#ifndef ANDROID
-		// ------------------ 美化后的单窗口整合 UI ------------------
-		ImGui::SetNextWindowPos(ImVec2(5, 5), ImGuiCond_Always);
-		ImGui::SetNextWindowSize(ImVec2(330, 710), ImGuiCond_Always);
-
-		ImGui::Begin("MRE Feature Phone", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove);
-
-		// 1. 文件读取控制区
-		if (ImGui::CollapsingHeader("MRE Storage (mre/)", ImGuiTreeNodeFlags_DefaultOpen)) {
-			if (mre_files.empty()) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "No .vxp files found in 'mre/'");
-				if (ImGui::Button("Rescan Folder")) {
-					rescan_mre_dir();
-				}
-			} else {
-				static int selected_idx = 0;
-				std::vector<const char*> items;
-				for (const auto& file : mre_files) items.push_back(file.c_str());
-
-				ImGui::PushItemWidth(200);
-				ImGui::Combo("##vxp_select", &selected_idx, items.data(), items.size());
-				ImGui::PopItemWidth();
-				ImGui::SameLine();
-				if (ImGui::Button("Launch")) {
-					appManager.add_app_for_launch(mre_files[selected_idx], true);
-				}
-			}
-		}
-
-		ImGui::Separator();
-
-		// 2. 屏幕预览区
-		ImGui::Text("Display (240x320)");
-		graphic.imgui_screen();
-
-		ImGui::Separator();
-
-		// 3. 可折叠按键区
-		static bool show_keypad = true;
-		ImGui::Checkbox("Show Keypad", &show_keypad);
-
-		if (show_keypad) {
-			keyboard.imgui_keyboard();
-		}
-
-		ImGui::End();
-#endif
 
 		{
 			screen_sp.setTexture(graphic.screen_tex, true);
@@ -324,12 +237,6 @@ int main(int argc, char** argv) {
 
 		keyboard.draw(&win_device);
 
-#ifndef ANDROID
-		ImGui::SFML::Render(win_debug);
-		win_debug.display();
-		win_debug.clear(sf::Color(30, 30, 30));
-#endif
-
 		win_device.display();
 		win_device.clear(sf::Color::Black);
 	}
@@ -337,8 +244,5 @@ int main(int argc, char** argv) {
 	work = false;
 	second_thread.join();
 
-#ifndef ANDROID
-	ImGui::SFML::Shutdown();
-#endif
 	return 0;
 }

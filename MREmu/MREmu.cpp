@@ -1,10 +1,14 @@
+#ifdef _WIN32
+// 解决 std::min 与 Windows 宏冲突问题
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include <iostream>
 #include <thread>
 #include <exception>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
@@ -59,28 +63,46 @@ Java_com_ximikboda_mremu_MainActivity_nativeLoadVxpFile(JNIEnv *env, jobject thi
 }
 #endif
 
-// Windows 底层硬件级异常过滤器 (如 Segment Fault / Access Violation)
 #ifdef _WIN32
+// 全局异常过滤处理
 LONG WINAPI WindowsCrashFilter(EXCEPTION_POINTERS* pExceptionInfo) {
     DWORD code = pExceptionInfo->ExceptionRecord->ExceptionCode;
     PVOID addr = pExceptionInfo->ExceptionRecord->ExceptionAddress;
 
     std::cout << "\n==================================================" << std::endl;
-    std::cout << "[CRASH CAUGHT] System Exception Detected!" << std::endl;
+    std::cout << "[CRASH CAUGHT] Hardware/Memory Exception Intercepted!" << std::endl;
     std::cout << "  Exception Code: 0x" << std::hex << code << std::dec << std::endl;
     std::cout << "  Fault Address:  0x" << std::hex << (uintptr_t)addr << std::dec << std::endl;
-    std::cout << "  Reason: MRE VXP code triggered invalid memory access / emulator fault." << std::endl;
+    std::cout << "  Note: Prevented CMD and emulator window from exiting." << std::endl;
     std::cout << "==================================================\n" << std::endl;
 
-    // 尝试安全退出当前崩溃的 VXP 实例，拉起内置 AppSelector 菜单
     if (g_appManager) {
         try {
             g_appManager->add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
         } catch (...) {}
     }
 
-    // 拦截崩溃，阻止系统杀死控制台进程，让 CPU 模拟线程安全终止/重置
     return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// 专门封装 SEH 的独立函数（避免与 C++ 对象析构/C2712 冲突）
+static void safe_mre_update(AppManager& appManager, uint32_t delta_ms) {
+    __try {
+        GDB::update();
+        appManager.update(delta_ms);
+    }
+    __except (WindowsCrashFilter(GetExceptionInformation())) {
+        spdlog::error("[CRASH RECOVERED] Intercepted core update fault.");
+    }
+}
+
+static void safe_graphic_update(MREngine::Graphic& graphic) {
+    __try {
+        graphic.update_screen();
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        std::cout << "[ERROR] Render/Graphic update fault intercepted." << std::endl;
+    }
 }
 #endif
 
@@ -92,14 +114,7 @@ void mre_main(AppManager* appManager_p) {
 		uint32_t delta_ms = deltaClock.restart().asMilliseconds();
 
 #ifdef _WIN32
-        // 包裹 Windows 原生 SEH 结构化异常
-        __try {
-            GDB::update();
-            appManager.update(delta_ms);
-        }
-        __except (WindowsCrashFilter(GetExceptionInformation())) {
-            spdlog::error("[CRASH INTERCEPTED] Recovering core execution loop...");
-        }
+        safe_mre_update(appManager, delta_ms);
 #else
 		try {
 			GDB::update();
@@ -120,7 +135,7 @@ void mre_main(AppManager* appManager_p) {
 
 int main(int argc, char** argv) {
 #ifdef _WIN32
-    // 在程序最顶层注册全局硬件崩溃捕获器，防止 CMD 被直接关闭
+    // 注册全局硬件崩捕获，防止 SEH 未处理导致程序直接退出
     SetUnhandledExceptionFilter(WindowsCrashFilter);
 #endif
 
@@ -264,11 +279,7 @@ int main(int argc, char** argv) {
 		}
 
 #ifdef _WIN32
-        __try {
-            graphic.update_screen();
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            std::cout << "[ERROR] Screen draw memory error." << std::endl;
-        }
+        safe_graphic_update(graphic);
 #else
 		try {
 			graphic.update_screen();

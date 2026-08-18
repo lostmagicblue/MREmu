@@ -1,5 +1,7 @@
 #include <iostream>
 #include <thread>
+#include <vector>
+#include <filesystem>
 
 #include "imgui.h"
 #include "imgui-SFML.h"
@@ -24,6 +26,8 @@
 #include <cmdparser.hpp>
 
 #include "NativeApps/Menu/AppSelector.h"
+
+namespace fs = std::filesystem;
 
 sf::Clock global_clock;
 
@@ -56,7 +60,6 @@ Java_com_ximikboda_mremu_MainActivity_nativeLoadVxpFile(JNIEnv *env, jobject thi
     env->ReleaseStringUTFChars(j_path, path_cstr);
 }
 #endif
-
 
 void mre_main(AppManager* appManager_p) {
 	AppManager& appManager = *appManager_p;
@@ -121,12 +124,11 @@ int main(int argc, char** argv) {
 	MREngine::Graphic graphic;
 
 #ifndef ANDROID
-	sf::RenderWindow win_debug(sf::VideoMode(1000, 600), "MREmu Debug");
+	sf::RenderWindow win_debug(sf::VideoMode(340, 720), "MREmu Phone Container");
 	sf::RenderWindow win_device(sf::VideoMode(graphic.width, graphic.height + 208), "MREmu Device");
 	ImGui::SFML::Init(win_debug);
 	win_debug.setFramerateLimit(60);
 	win_device.setFramerateLimit(60);
-	//win_debug.setVerticalSyncEnabled(true);
 #else
 	sf::RenderWindow win_device(sf::VideoMode::getDesktopMode(), "MREmu");
 	win_device.setFramerateLimit(60);
@@ -173,7 +175,6 @@ int main(int argc, char** argv) {
 	else
 		appManager.add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
 
-
 	int scale = 1;
 	sf::Sprite screen_sp(graphic.screen_tex);
 	touch.screen = &screen_sp;
@@ -196,9 +197,22 @@ int main(int argc, char** argv) {
 	update_screen_size();
 
 	sf::Clock fps;
-
 	sf::Clock deltaClock;
 	sf::Event event;
+
+	// 自动扫描本地 mre 文件夹中的 .vxp 文件
+	std::vector<std::string> mre_files;
+	auto rescan_mre_dir = [&]() {
+		mre_files.clear();
+		if (fs::exists("mre") && fs::is_directory("mre")) {
+			for (const auto& entry : fs::directory_iterator("mre")) {
+				if (entry.path().extension() == ".vxp") {
+					mre_files.push_back(entry.path().string());
+				}
+			}
+		}
+	};
+	rescan_mre_dir();
 
 	while (win_device.isOpen()
 #ifndef ANDROID
@@ -236,12 +250,13 @@ int main(int argc, char** argv) {
                 break;
 			}
 		}
+
 #ifndef ANDROID
 		ImGui::SFML::Update(win_debug, deltaClock.restart());
 
 		if (show_error) {
 			ImGui::OpenPopup("VXP Error");
-			show_error = false; // Only call OpenPopup once
+			show_error = false;
 		}
 		if (ImGui::BeginPopupModal("VXP Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("%s", error_message.c_str());
@@ -255,30 +270,50 @@ int main(int argc, char** argv) {
 		graphic.update_screen();
 
 #ifndef ANDROID
+		// ------------------ 美化后的单窗口整合 UI ------------------
+		ImGui::SetNextWindowPos(ImVec2(5, 5), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(330, 710), ImGuiCond_Always);
+
+		ImGui::Begin("MRE Feature Phone", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove);
+
+		// 1. 文件读取控制区
+		if (ImGui::CollapsingHeader("MRE Storage (mre/)", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (mre_files.empty()) {
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "No .vxp files found in 'mre/'");
+				if (ImGui::Button("Rescan Folder")) {
+					rescan_mre_dir();
+				}
+			} else {
+				static int selected_idx = 0;
+				std::vector<const char*> items;
+				for (const auto& file : mre_files) items.push_back(file.c_str());
+
+				ImGui::PushItemWidth(200);
+				ImGui::Combo("##vxp_select", &selected_idx, items.data(), items.size());
+				ImGui::PopItemWidth();
+				ImGui::SameLine();
+				if (ImGui::Button("Launch")) {
+					appManager.add_app_for_launch(mre_files[selected_idx], true);
+				}
+			}
+		}
+
+		ImGui::Separator();
+
+		// 2. 屏幕预览区
+		ImGui::Text("Display (240x320)");
 		graphic.imgui_screen();
-		App* active_app = appManager.get_active_app();
-		if (active_app) {
-			active_app->graphic.imgui_layers();
-			active_app->graphic.imgui_canvases();
+
+		ImGui::Separator();
+
+		// 3. 可折叠按键区
+		static bool show_keypad = true;
+		ImGui::Checkbox("Show Keypad", &show_keypad);
+
+		if (show_keypad) {
+			keyboard.imgui_keyboard();
 		}
 
-		if (ImGui::Begin("Memory") && active_app) {
-			float size = active_app->app_memory.get_memory_size();
-			float free_size = active_app->app_memory.get_free_memory_size();
-			float used_size = size - free_size;
-			ImGui::Text("All:\n%1.0f bytes\n%1.1f kb\n %1.3f mb\n", 
-				size, size / 1024.f, size / 1024.f / 1024.f);
-			ImGui::Text("Free:\n%1.0f bytes\n%1.1f kb\n %1.3f mb\n", 
-				free_size, free_size / 1024.f, free_size / 1024.f / 1024.f);
-			ImGui::Text("Used:\n%1.0f bytes\n%1.1f kb\n %1.3f mb\n", 
-				used_size, used_size / 1024.f, used_size / 1024.f / 1024.f);
-			ImGui::Text("Used: %1.2f%%%", 100.f*used_size / size);
-		}
-		ImGui::End();
-
-		if (ImGui::Begin("Fps")) {
-			ImGui::Text("%1.3f", 1.f / fps.restart().asSeconds());
-		}
 		ImGui::End();
 #endif
 
@@ -287,17 +322,12 @@ int main(int argc, char** argv) {
 			win_device.draw(screen_sp);
 		}
 
-#ifndef ANDROID
-		Cpu::imgui_REG();
-
-		keyboard.imgui_keyboard();
-#endif
 		keyboard.draw(&win_device);
 
 #ifndef ANDROID
 		ImGui::SFML::Render(win_debug);
 		win_debug.display();
-		win_debug.clear();
+		win_debug.clear(sf::Color(30, 30, 30));
 #endif
 
 		win_device.display();

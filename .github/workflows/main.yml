@@ -21,52 +21,35 @@ jobs:
     - name: Update submodules
       run: git submodule update --init --recursive
 
-    # 1. 下载并安装 MRE SDK
-    - name: Download and install MRE SDK
+    # 1. 解压项目根目录下的 include.zip 覆盖合并到 include 目录
+    - name: Extract SDK Headers
       shell: powershell
       run: |
-        Invoke-WebRequest -Uri "https://github.com/raspiduino/mre-sdk/releases/download/1.0.0/MRE_SDK_3.0.00.20_Normal_Eng.zip" -OutFile "mre-sdk.zip"
-        Expand-Archive -Path "mre-sdk.zip" -DestinationPath "mre-sdk-temp"
-        
-        $installerPath = "mre-sdk-temp\MRE_SDK_3.0.00.20_Normal_Eng.exe"
-        Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=`"C:\Program Files (x86)\MRE SDK V3.0.00`"" -Wait
-
-    # 2. 诊断步骤：查看 SDK 实际安装路径与文件结构
-    - name: Inspect Installed SDK Directory
-      shell: powershell
-      run: |
-        $sdkDir = "C:\Program Files (x86)\MRE SDK V3.0.00"
-        
-        if (Test-Path $sdkDir) {
-            Write-Host "================== SDK Root Path Found =================="
-            Get-ChildItem -Path $sdkDir
-            
-            Write-Host "================== Searching for vmgraph.h =================="
-            Get-ChildItem -Path $sdkDir -Filter "vmgraph.h" -Recurse
-            
-            Write-Host "================== Directory Tree =================="
-            tree $sdkDir /F
+        if (Test-Path "include.zip") {
+            # -Force 会在保持原有文件的基础上，覆盖同名文件
+            Expand-Archive -Path "include.zip" -DestinationPath "." -Force
+            Write-Host "Successfully extracted SDK headers into include directory."
         } else {
-            Write-Error "SDK Directory ($sdkDir) does NOT exist!"
+            Write-Error "include.zip not found in repository root!"
             exit 1
         }
 
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
-    # 3. 配置 CMake 并生成 Visual Studio 工程
+    # 2. 配置 CMake 并生成 Visual Studio 工程
     - name: Configure CMake
       shell: powershell
       run: |
         cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-    # 4. 执行编译
+    # 3. 执行编译
     - name: Build project
       shell: powershell
       run: |
         cmake --build build --config Release
 
-    # 5. 打包并上传生成的 Build 产物
+    # 4. 打包并上传生成的 Build 产物
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:

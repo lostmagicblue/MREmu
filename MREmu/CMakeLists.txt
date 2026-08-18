@@ -2,14 +2,19 @@ cmake_minimum_required (VERSION 3.8)
 
 project(MREmu)
 
-# 如果是 Windows 平台，强制将 MRE SDK 的 include 目录加入全局头文件搜索路径
+# 1. 包含项目自带的原 include 目录
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
+
+# 2. 包含 SDK 头文件目录（支持 C盘默认路径 或 项目根目录解压出的 include/sdk_include）
 if(WIN32)
     set(MRE_SDK_INC "C:/Program Files (x86)/MRE SDK V3.0.00/include")
     if(EXISTS "${MRE_SDK_INC}")
         message(STATUS "Found MRE SDK include dir at: ${MRE_SDK_INC}")
         include_directories("${MRE_SDK_INC}")
     else()
-        message(WARNING "MRE SDK include dir not found at: ${MRE_SDK_INC}")
+        # 如果 C 盘找不到，直接使用项目根目录下的 include 目录（包含解压出的 SDK 头文件）
+        message(STATUS "Using local repository include directory for MRE SDK")
+        include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
     endif()
 endif()
 

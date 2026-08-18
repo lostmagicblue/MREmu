@@ -2,6 +2,10 @@
 #include <thread>
 #include <exception>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
 
@@ -55,7 +59,31 @@ Java_com_ximikboda_mremu_MainActivity_nativeLoadVxpFile(JNIEnv *env, jobject thi
 }
 #endif
 
-// 增强子线程防闪退处理
+// Windows 底层硬件级异常过滤器 (如 Segment Fault / Access Violation)
+#ifdef _WIN32
+LONG WINAPI WindowsCrashFilter(EXCEPTION_POINTERS* pExceptionInfo) {
+    DWORD code = pExceptionInfo->ExceptionRecord->ExceptionCode;
+    PVOID addr = pExceptionInfo->ExceptionRecord->ExceptionAddress;
+
+    std::cout << "\n==================================================" << std::endl;
+    std::cout << "[CRASH CAUGHT] System Exception Detected!" << std::endl;
+    std::cout << "  Exception Code: 0x" << std::hex << code << std::dec << std::endl;
+    std::cout << "  Fault Address:  0x" << std::hex << (uintptr_t)addr << std::dec << std::endl;
+    std::cout << "  Reason: MRE VXP code triggered invalid memory access / emulator fault." << std::endl;
+    std::cout << "==================================================\n" << std::endl;
+
+    // 尝试安全退出当前崩溃的 VXP 实例，拉起内置 AppSelector 菜单
+    if (g_appManager) {
+        try {
+            g_appManager->add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
+        } catch (...) {}
+    }
+
+    // 拦截崩溃，阻止系统杀死控制台进程，让 CPU 模拟线程安全终止/重置
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
 void mre_main(AppManager* appManager_p) {
 	AppManager& appManager = *appManager_p;
 
@@ -63,24 +91,39 @@ void mre_main(AppManager* appManager_p) {
 	while (work) {
 		uint32_t delta_ms = deltaClock.restart().asMilliseconds();
 
+#ifdef _WIN32
+        // 包裹 Windows 原生 SEH 结构化异常
+        __try {
+            GDB::update();
+            appManager.update(delta_ms);
+        }
+        __except (WindowsCrashFilter(GetExceptionInformation())) {
+            spdlog::error("[CRASH INTERCEPTED] Recovering core execution loop...");
+        }
+#else
 		try {
 			GDB::update();
 			appManager.update(delta_ms);
 		}
 		catch (const std::exception& e) {
-			spdlog::error("[CRASH PREVENTED] Exception in MRE main loop: {}", e.what());
-			std::cout << "[ERROR] Exception caught in MRE core: " << e.what() << std::endl;
+			spdlog::error("[CRASH PREVENTED] Exception: {}", e.what());
+			std::cout << "[ERROR] Exception caught: " << e.what() << std::endl;
 		}
 		catch (...) {
-			spdlog::error("[CRASH PREVENTED] Unknown exception/signal caught in MRE core execution.");
-			std::cout << "[ERROR] Unknown crash prevented in MRE runtime loop." << std::endl;
+			spdlog::error("[CRASH PREVENTED] Unknown crash in MRE core execution.");
 		}
+#endif
 
 		sf::sleep(sf::milliseconds(1000 / 120));
 	}
 }
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    // 在程序最顶层注册全局硬件崩溃捕获器，防止 CMD 被直接关闭
+    SetUnhandledExceptionFilter(WindowsCrashFilter);
+#endif
+
     std::string app_path = "";
     bool path_is_local = false;
 
@@ -128,7 +171,6 @@ int main(int argc, char** argv) {
 	MREngine::AppAudio::init();
 	MREngine::Graphic graphic;
 
-	// 只创建设备主窗口，移除调试窗口
 	sf::RenderWindow win_device(sf::VideoMode(graphic.width, graphic.height + 208), "MREmu Device");
 	win_device.setFramerateLimit(60);
 
@@ -168,13 +210,11 @@ int main(int argc, char** argv) {
 		if (fs::exists(app_path) || path_is_local) {
 			try {
 				appManager.add_app_for_launch(app_path, path_is_local);
-			} catch (const std::exception& e) {
-				spdlog::error("Failed to launch VXP: {}", e.what());
-				std::cout << "[ERROR] Cannot open VXP file: " << app_path << " | Reason: " << e.what() << std::endl;
+			} catch (...) {
+				std::cout << "[ERROR] Exception launch VXP: " << app_path << std::endl;
 				appManager.add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
 			}
 		} else {
-			spdlog::error("VXP file does not exist: {}", app_path);
 			std::cout << "[ERROR] VXP file does not exist: " << app_path << std::endl;
 			appManager.add_app_for_launch("", false, &NativeApps::Menu::AppSelector::Conf);
 		}
@@ -223,12 +263,17 @@ int main(int argc, char** argv) {
 			}
 		}
 
+#ifdef _WIN32
+        __try {
+            graphic.update_screen();
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            std::cout << "[ERROR] Screen draw memory error." << std::endl;
+        }
+#else
 		try {
 			graphic.update_screen();
-		} catch (const std::exception& e) {
-			spdlog::error("[GRAPHIC ERROR] {}", e.what());
-			std::cout << "[ERROR] Screen update error: " << e.what() << std::endl;
-		}
+		} catch (...) {}
+#endif
 
 		{
 			screen_sp.setTexture(graphic.screen_tex, true);

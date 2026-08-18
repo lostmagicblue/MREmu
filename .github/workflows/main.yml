@@ -21,46 +21,50 @@ jobs:
     - name: Update submodules
       run: git submodule update --init --recursive
 
-    # 1. 下载并提取 SDK，还原与本地完全一致的 SDK 根目录结构
-    - name: Download and extract MRE SDK
+    # 1. 真实静默安装 SDK
+    - name: Download and install MRE SDK
       shell: powershell
       run: |
         Invoke-WebRequest -Uri "https://github.com/raspiduino/mre-sdk/releases/download/1.0.0/MRE_SDK_3.0.00.20_Normal_Eng.zip" -OutFile "mre-sdk.zip"
         Expand-Archive -Path "mre-sdk.zip" -DestinationPath "mre-sdk-temp"
         
-        choco install innoextract -y
-        innoextract mre-sdk-temp/MRE_SDK_3.0.00.20_Normal_Eng.exe -d "$env:GITHUB_WORKSPACE/mre-sdk-temp-extracted"
+        $installerPath = "mre-sdk-temp\MRE_SDK_3.0.00.20_Normal_Eng.exe"
+        Start-Process -FilePath $installerPath -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=`"C:\Program Files (x86)\MRE SDK V3.0.00`"" -Wait
         
-        # 寻找 vmgraph.h，并将其上级 include 的父目录设定为标准 SDK 根目录
-        $vmHeader = Get-ChildItem -Path "$env:GITHUB_WORKSPACE/mre-sdk-temp-extracted" -Filter "vmgraph.h" -Recurse | Select-Object -First 1
-        if ($vmHeader) {
-            # 真实包含 include, lib, tools 的 SDK 根路径
-            $realSdkRoot = $vmHeader.Directory.Parent.FullName
-            $includeDir = $vmHeader.Directory.FullName
+        $sdkDir = "C:\Program Files (x86)\MRE SDK V3.0.00"
+        $includeDir = "$sdkDir\include"
+        
+        if (Test-Path "$includeDir\vmgraph.h") {
+            Write-Host "SDK Successfully verified at: $sdkDir"
             
-            Write-Host "Found Standard SDK Root at: $realSdkRoot"
-            
-            # 设置环境变量，传递给后续步骤
-            "MRE_SDK=$realSdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            "MRE_SDK_DIR=$realSdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            "MRE_SDK_PATH=$realSdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            # 将环境变量写入 GITHUB_ENV，确保后续所有 Step 都能读取到
+            "MRE_SDK=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "MRE_SDK_DIR=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "MRE_SDK_PATH=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             "INCLUDE=$env:INCLUDE;$includeDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         } else {
-            Write-Error "Could not find vmgraph.h in extracted files!"
+            Write-Error "Failed to locate vmgraph.h in $includeDir"
             exit 1
         }
 
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
-    # 2. 配置 CMake
+    # 2. 配置 CMake（多管齐下指向 SDK 路径）
     - name: Configure CMake
       shell: powershell
       run: |
+        $sdkDir = "C:/Program Files (x86)/MRE SDK V3.0.00"
+        $incDir = "C:/Program Files (x86)/MRE SDK V3.0.00/include"
+        
         cmake -B build `
-          -DMRE_SDK="$env:MRE_SDK" `
-          -DMRE_SDK_DIR="$env:MRE_SDK" `
-          -DMRE_SDK_PATH="$env:MRE_SDK"
+          -DCMAKE_BUILD_TYPE=Release `
+          -DMRE_SDK="$sdkDir" `
+          -DMRE_SDK_DIR="$sdkDir" `
+          -DMRE_SDK_PATH="$sdkDir" `
+          -DCMAKE_INCLUDE_PATH="$incDir" `
+          -DCMAKE_CXX_FLAGS="/I`"$incDir`"" `
+          -DCMAKE_C_FLAGS="/I`"$incDir`""
 
     # 3. 编译
     - name: Build project
@@ -68,7 +72,7 @@ jobs:
       run: |
         cmake --build build --config Release
 
-    # 4. 打包构建产物
+    # 4. 上传二进制产物
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:

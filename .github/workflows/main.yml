@@ -16,20 +16,44 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
+        fetch-depth: 0
+
+    - name: Update submodules
+      run: git submodule update --init --recursive
+
+    # 1. 自动下载并解压 Mediatek SDK
+    - name: Download and extract MRE SDK
+      shell: powershell
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/raspiduino/mre-sdk/releases/download/1.0.0/MRE_SDK_3.0.00.20_Normal_Eng.zip" -OutFile "mre-sdk.zip"
+        Expand-Archive -Path "mre-sdk.zip" -DestinationPath "mre-sdk-temp"
+        # 下载 7-Zip / innoextract 或使用 PowerShell 解包 exe
+        # 官方 SDK 安装包可用 Expand-Archive 或 innoextract 提取
+        choco install innoextract -y
+        innoextract mre-sdk-temp/MRE_SDK_3.0.00.20_Normal_Eng.exe -d "$env:GITHUB_WORKSPACE/mre-sdk-app"
 
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
+    # 2. 配置 CMake 并注入 MRE_SDK 环境变量
     - name: Configure CMake
-      run: cmake -B build
+      shell: powershell
+      run: |
+        $env:MRE_SDK = "$env:GITHUB_WORKSPACE/mre-sdk-app/app"
+        cmake -B build -DMRE_SDK="$env:GITHUB_WORKSPACE/mre-sdk-app/app"
 
+    # 3. 执行 Release 编译
     - name: Build project
-      run: cmake --build build --config Release
+      shell: powershell
+      run: |
+        $env:MRE_SDK = "$env:GITHUB_WORKSPACE/mre-sdk-app/app"
+        cmake --build build --config Release
 
+    # 4. 打包输出 bin 目录下的最终生成文件
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: MREmu-Windows-Release
         path: |
-          build/Release/
+          bin/
           build/bin/Release/

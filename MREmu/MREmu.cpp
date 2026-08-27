@@ -304,7 +304,7 @@ int main(int argc, char** argv) {
 	{
 		auto sinks = spdlog::default_logger()->sinks();
 		// 给已存在的 stdout sink 设置简洁 pattern
-		auto f = std::make_unique<spdlog::pattern_formatter>(
+		auto f = std::make_unique<spdlog::details::pattern_formatter>(...)(
 			"[%H:%M:%S.%e] [%^%l%$] %v", spdlog::pattern_time_type::local);
 		for (auto& s : sinks) s->set_formatter(f->clone());
 	}

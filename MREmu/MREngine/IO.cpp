@@ -104,21 +104,48 @@ static void replaceAll(std::string& str, const std::string& from, const std::str
 	}
 }
 
+// ================== glob 通配符匹配（宽字符版）==================
+// 语义：* 匹配任意长度（含空），? 匹配一个字符，其余按字面值匹配，大小写不敏感
+static bool glob_match(const std::wstring& pattern, const std::wstring& text) {
+	size_t p = 0, t = 0;
+	size_t star_p = std::wstring::npos, star_t = 0;
+	while (t < text.size()) {
+		wchar_t pc = (p < pattern.size()) ? pattern[p] : L'\0';
+		wchar_t tc = text[t];
+		wchar_t pcl = (pc >= L'A' && pc <= L'Z') ? wchar_t(pc + (L'a' - L'A')) : pc;
+		wchar_t tcl = (tc >= L'A' && tc <= L'Z') ? wchar_t(tc + (L'a' - L'A')) : tc;
+		if (p < pattern.size() && (pcl == L'?' || pcl == tcl)) {
+			++p; ++t;
+		} else if (p < pattern.size() && pcl == L'*') {
+			star_p = ++p;
+			star_t = t;
+		} else if (star_p != std::wstring::npos) {
+			p = star_p;
+			t = ++star_t;
+		} else {
+			return false;
+		}
+	}
+	while (p < pattern.size() && (pattern[p] == L'*' || pattern[p] == L'?')) ++p;
+	return p == pattern.size();
+}
+
 MREngine::find_el::find_el(fs::path path_f) {
 	path = path_from_emu(path_f);
 	lfolder = path_f.parent_path();
 
 	find_recv = false;
-	std::string find_line = path.filename().string();
-	if (find_line.size()) {
-		replaceAll(find_line, "*", ".*");
-		try {
-			find_reg = std::regex(find_line);
-			find_recv = true;
-		}
-		catch (...) {
-			spdlog::error("regex faild ({})", find_line);
-		}
+	// 通配符（pattern）从路径中取文件名，保持为宽串，避免编码歧义
+	std::wstring find_line_w = path.filename().wstring();
+	if (!find_line_w.empty() &&
+		(find_line_w.find(L'*') != std::wstring::npos ||
+		 find_line_w.find(L'?') != std::wstring::npos)) {
+		glob_pattern = find_line_w;
+		find_recv = true;
+	} else {
+		// 非通配，精确文件名（大小写不敏感）
+		glob_pattern = find_line_w;
+		find_recv = !find_line_w.empty();
 	}
 
 	if (!fs::exists(path.parent_path()))
@@ -141,9 +168,9 @@ fs::path MREngine::find_el::next() {
 	else
 		di++;
 
+	// 用 wstring 做 glob 匹配，彻底避开 UTF-8 / GBK / ANSI 编码不一致问题
 	while (find_recv && di != end_itr &&
-		!std::regex_match(std::string(di->path().filename().u8string().begin(),
-			di->path().filename().u8string().end()), find_reg))
+		!glob_match(glob_pattern, di->path().filename().wstring()))
 		di++;
 	if (di == end_itr)
 		return "";

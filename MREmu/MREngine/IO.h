@@ -16,7 +16,8 @@ namespace MREngine {
 
 	struct find_el{
 		fs::directory_iterator di;
-		std::regex find_reg;
+		// 不再使用 std::regex（有编码与转义问题），改用宽串 glob 匹配
+		std::wstring glob_pattern;
 		fs::path lfolder;
 		fs::path path;
 		bool find_recv;

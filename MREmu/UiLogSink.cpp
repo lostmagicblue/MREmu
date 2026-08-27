@@ -1,5 +1,6 @@
 #include "UiLogSink.h"
 #include <spdlog/spdlog.h>
+#include <spdlog/details/log_msg.h>
 #include <SFML/System.hpp>  // sf::Clock
 
 namespace {
@@ -34,24 +35,23 @@ void UiLogSink::clear() {
     ring().clear();
 }
 
-void UiLogSink::sink_it_(const spdlog::details::log_msg& msg) {
+// spdlog::sinks::sink 接口：真正写日志
+// 直接继承最基类 sink，log() / flush() 两个函数名在所有 spdlog 版本里都稳定
+void UiLogSink::log(const spdlog::details::log_msg& msg) {
     UiLogEntry e;
     e.ts_ms = (uint64_t)get_start_clock()->getElapsedTime().asMilliseconds();
     e.level = (int)msg.level;
 
     // payload 一般形如: "[模块名] [级别] 实际消息"
-    // 也可能: "[模块名] 实际消息" （级别颜色 [%^..%$] 已经被 stdout sink pattern 处理，但 payload 本身带开头那串）
-    // 我们只从字符串里手工拆模块 + 消息内容
+    // 也可能: "[模块名] 实际消息"
     std::string text(msg.payload.data(), msg.payload.size());
 
     if (!text.empty() && text.front() == '[') {
         size_t end1 = text.find(']');
         if (end1 != std::string::npos) {
             e.module = text.substr(1, end1 - 1);
-            // 跳过 "]" 后面的空白
             size_t p = end1 + 1;
             while (p < text.size() && (text[p] == ' ' || text[p] == '\t')) ++p;
-            // 可能还有第二对方括号，里面是级别 "[debug]" "[warn]" 等，跳过
             if (p < text.size() && text[p] == '[') {
                 size_t end2 = text.find(']', p);
                 if (end2 != std::string::npos) {
@@ -67,7 +67,6 @@ void UiLogSink::sink_it_(const spdlog::details::log_msg& msg) {
         e.msg = std::move(text);
     }
 
-    // 去掉换行符尾部
     while (!e.msg.empty() && (e.msg.back() == '\n' || e.msg.back() == '\r'))
         e.msg.pop_back();
 
@@ -77,4 +76,5 @@ void UiLogSink::sink_it_(const spdlog::details::log_msg& msg) {
     while (r.size() > MAX_LINES) r.pop_front();
 }
 
-void UiLogSink::flush_() { /* do nothing for ringbuffer */ }
+// 环形缓存不需要 flush，空实现即可
+void UiLogSink::flush() {}

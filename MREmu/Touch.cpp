@@ -21,8 +21,8 @@ sf::Vector2i Touch::to_screen_coords(sf::Vector2i d_pos) {
 
 bool Touch::is_on_screen(sf::Vector2i pos) {
 	auto size = screen->getTexture()->getSize();
-	return 0 <= pos.x && pos.x < size.x &&
-		0 <= pos.y && pos.y < size.y;
+	return 0 <= pos.x && (size_t)pos.x < size.x &&
+		0 <= pos.y && (size_t)pos.y < size.y;
 }
 
 bool Touch::d_event(d_event_e ev, touch_source s, sf::Vector2i d_pos) {

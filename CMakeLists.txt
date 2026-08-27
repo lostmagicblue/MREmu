@@ -11,6 +11,25 @@ project ("MREmu")
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
+# MSVC 统一静态 CRT（/MT Release / /MTd Debug），消灭 LNK4098 LIBCMT / MSVCRT 互相冲突
+# SFML/spdlog/unicorn 都是从源码构建，统一之后 CRT 选择一致就不会告警
+if(MSVC)
+  foreach(flag_var
+      CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
+      CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO
+      CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+      CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+    if(${flag_var} MATCHES "/MD")
+      string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
+    endif()
+    if(${flag_var} MATCHES "/MDd")
+      string(REGEX REPLACE "/MDd" "/MTd" ${flag_var} "${${flag_var}}")
+    endif()
+  endforeach()
+  # 保证 C++ 异常模型一致，避免 deps 之间默认值漂移
+  add_compile_options(/EHsc)
+endif()
+
 # Enable optimizations by default
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Setting build type to 'Release' as none was specified.")

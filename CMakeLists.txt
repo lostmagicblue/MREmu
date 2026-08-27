@@ -26,6 +26,14 @@ endif()
 add_definitions(-DLIBICONV_PLUG)
 set(BUILD_SHARED_LIBS FALSE) 
 
+# MRE SDK path: can be set via -DMRE_SDK_PATH=... or $ENV{MRE_SDK}
+if(DEFINED ENV{MRE_SDK})
+    set(MRE_SDK_PATH "$ENV{MRE_SDK}" CACHE PATH "Path to MRE SDK")
+elseif(NOT DEFINED MRE_SDK_PATH)
+    set(MRE_SDK_PATH "${CMAKE_SOURCE_DIR}/sdk" CACHE PATH "Path to MRE SDK")
+endif()
+message(STATUS "MRE SDK path: ${MRE_SDK_PATH}")
+
 include_directories("include")
 
 add_subdirectory (deps)

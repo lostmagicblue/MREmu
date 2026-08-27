@@ -370,3 +370,6 @@ Android/.idea
 Android/app/.cxx
 Android/app/build
 Android/local.properties
+
+# MRE SDK extracted directory
+sdk/

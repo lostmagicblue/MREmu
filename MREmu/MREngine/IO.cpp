@@ -142,7 +142,8 @@ fs::path MREngine::find_el::next() {
 		di++;
 
 	while (find_recv && di != end_itr &&
-		!std::regex_match(utf8_to_ascii(di->path().filename().u8string()), find_reg))
+		!std::regex_match(std::string(di->path().filename().u8string().begin(),
+			di->path().filename().u8string().end()), find_reg))
 		di++;
 	if (di == end_itr)
 		return "";

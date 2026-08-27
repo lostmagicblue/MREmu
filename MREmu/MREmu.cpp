@@ -300,13 +300,13 @@ int main(int argc, char** argv) {
 	spdlog::set_level(spdlog::level::debug);
 
 #ifndef ANDROID
-	// cmd 控制台日志：简化 pattern，一行一个 [级别] 内容，去掉多余模块
+	// cmd 控制台日志：简化 pattern，一行一个 [时间] [级别] 内容
+	// 用 sink->set_pattern() 字符串 API 即可，不依赖 pattern_formatter 头和内部命名空间
+	// 注：set_pattern 的 time_type 参数在部分老版本 spdlog 不存在，这里不传（默认 localtime）
 	{
-		auto sinks = spdlog::default_logger()->sinks();
-		// 给已存在的 stdout sink 设置简洁 pattern
-		auto f = std::make_unique<spdlog::details::pattern_formatter>(...)(
-			"[%H:%M:%S.%e] [%^%l%$] %v", spdlog::pattern_time_type::local);
-		for (auto& s : sinks) s->set_formatter(f->clone());
+		auto& sinks = spdlog::default_logger()->sinks();
+		for (auto& s : sinks)
+			s->set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
 	}
 
 	// 安装 ImGui 环形日志 sink

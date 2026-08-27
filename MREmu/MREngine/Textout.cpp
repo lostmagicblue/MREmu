@@ -322,13 +322,20 @@ VM_GDI_RESULT vm_graphic_draw_abm_text(VMINT handle, VMINT x, VMINT y, VMINT col
 VMUINT vm_graphic_get_char_num_in_width(VMWCHAR* string, VMUINT width, VMINT  checklinebreak, VMUINT gap) {
 	int w = 0, i = 0;
 	for (i = 0; string[i]; ++i) {
-		int data_offset = ((unsigned int*)unifont_15_1_04_bin)[(unsigned short)string[i]];
-
-		if (data_offset == 0 || is_skip_symbol(string[i]))
+		if (is_skip_symbol(string[i]))
 			continue;
 
-		int ch_d = unifont_15_1_04_bin[data_offset];
-		int ch_w = ch_d & 0xF;
+		int data_offset = ((unsigned int*)unifont_15_1_04_bin)[(unsigned short)string[i]];
+
+		int ch_w;
+		if (data_offset == 0) {
+			if ((unsigned short)string[i] < 0x80)
+				continue;
+			ch_w = 15; // CJK 缺字占位
+		} else {
+			int ch_d = unifont_15_1_04_bin[data_offset];
+			ch_w = ch_d & 0xF;
+		}
 
 		if (width >= w && width < w + ch_w + 1 + gap)
 			return i;

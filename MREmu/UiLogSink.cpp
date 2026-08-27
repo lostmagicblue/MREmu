@@ -1,7 +1,5 @@
 #include "UiLogSink.h"
-#include <spdlog/logger.h>
-#include <spdlog/details/log_msg.h>
-#include <spdlog/formatter.h>
+#include <spdlog/spdlog.h>
 #include <SFML/System.hpp>  // sf::Clock
 
 namespace {
@@ -13,18 +11,15 @@ namespace {
     static InitClock s_init;
 }
 
-std::mutex&     UiLogSink::mtx()      { static std::mutex m; return m; }
-std::deque<UiLogEntry>& UiLogSink::ring() { static std::deque<UiLogEntry> r; return r; }
-UiLogSink*&     UiLogSink::instance() { static UiLogSink* p = nullptr; return p; }
+std::mutex&             UiLogSink::mtx()       { static std::mutex m; return m; }
+std::deque<UiLogEntry>& UiLogSink::ring()      { static std::deque<UiLogEntry> r; return r; }
+UiLogSink*&             UiLogSink::instance()  { static UiLogSink* p = nullptr; return p; }
 
 void UiLogSink::install() {
     std::lock_guard<std::mutex> lk(mtx());
     if (instance()) return; // 已经装过了
     auto sink = std::make_shared<UiLogSink>();
     instance() = sink.get();
-
-    // 格式化：我们自己保存 module/msg/time 字段，所以就用默认 formatter 再拼回来也行
-    // 但为了简洁，我们在 sink_it_ 里用 raw 信息自己组装
     spdlog::default_logger()->sinks().push_back(sink);
 }
 
@@ -40,34 +35,27 @@ void UiLogSink::clear() {
 }
 
 void UiLogSink::sink_it_(const spdlog::details::log_msg& msg) {
-    // payload 是用户真正写的 msg（带模块名时是 [xx] [level] content）
-    // spdlog::formatter 把 level、logger_name、时间戳填进 msg。
-    // 为了简洁，我们只取 payload 原文和 level，再从 pattern 中的 [Module] 解析模块。
-    spdlog::memory_buf_t formatted;
-    spdlog::formatter_ptr formatter_ptr; // 不格式化，直接用 payload
-    (void)formatter_ptr;
-
     UiLogEntry e;
-    e.ts_ms  = (uint64_t)get_start_clock()->getElapsedTime().asMilliseconds();
-    e.level  = (int)msg.level;
+    e.ts_ms = (uint64_t)get_start_clock()->getElapsedTime().asMilliseconds();
+    e.level = (int)msg.level;
 
-    // payload 里的开头有 [Mod]，我们手工拆
-    fmt::string_view pay = msg.payload;
-    std::string text(pay.data(), pay.size());
+    // payload 一般形如: "[模块名] [级别] 实际消息"
+    // 也可能: "[模块名] 实际消息" （级别颜色 [%^..%$] 已经被 stdout sink pattern 处理，但 payload 本身带开头那串）
+    // 我们只从字符串里手工拆模块 + 消息内容
+    std::string text(msg.payload.data(), msg.payload.size());
 
-    // 模式: "[Main] [xxx] actual message" —— 取第一个方括号为模块
-    if (!text.empty() && text[0] == '[') {
-        size_t close1 = text.find(']');
-        if (close1 != std::string::npos) {
-            e.module = text.substr(1, close1 - 1);
-            // 跳过 [Mod] 后面的空格
-            size_t p = close1 + 1;
+    if (!text.empty() && text.front() == '[') {
+        size_t end1 = text.find(']');
+        if (end1 != std::string::npos) {
+            e.module = text.substr(1, end1 - 1);
+            // 跳过 "]" 后面的空白
+            size_t p = end1 + 1;
             while (p < text.size() && (text[p] == ' ' || text[p] == '\t')) ++p;
-            // 再接一个 [Level]（可选）
+            // 可能还有第二对方括号，里面是级别 "[debug]" "[warn]" 等，跳过
             if (p < text.size() && text[p] == '[') {
-                size_t close2 = text.find(']', p);
-                if (close2 != std::string::npos) {
-                    p = close2 + 1;
+                size_t end2 = text.find(']', p);
+                if (end2 != std::string::npos) {
+                    p = end2 + 1;
                     while (p < text.size() && (text[p] == ' ' || text[p] == '\t')) ++p;
                 }
             }
@@ -79,8 +67,14 @@ void UiLogSink::sink_it_(const spdlog::details::log_msg& msg) {
         e.msg = std::move(text);
     }
 
+    // 去掉换行符尾部
+    while (!e.msg.empty() && (e.msg.back() == '\n' || e.msg.back() == '\r'))
+        e.msg.pop_back();
+
     std::lock_guard<std::mutex> lk(mtx());
     auto& r = ring();
     r.push_back(std::move(e));
     while (r.size() > MAX_LINES) r.pop_front();
 }
+
+void UiLogSink::flush_() { /* do nothing for ringbuffer */ }

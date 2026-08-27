@@ -33,4 +33,4 @@ target_link_libraries(MREngine ADLMIDI_static)
 target_link_libraries(MREngine libiconv)
 target_link_libraries(MREngine spdlog)
 
-target_include_directories(MREngine PUBLIC "$ENV{MRE_SDK}/include")
+target_include_directories(MREngine PUBLIC "${MRE_SDK_PATH}/include")

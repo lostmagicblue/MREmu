@@ -1,0 +1,47 @@
+name: Build MREmu on Windows
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Install OpenAL
+      shell: pwsh
+      run: |
+        # 静默安装 OpenAL
+        Invoke-WebRequest -Uri "https://www.openal.org/downloads/oalinst.zip" -OutFile "oalinst.zip"
+        Expand-Archive -Path "oalinst.zip" -DestinationPath "oalinst"
+        Start-Process -FilePath "oalinst\oalinst.exe" -ArgumentList "/S" -Wait
+
+    - name: Download and Extract MRE SDK
+      shell: pwsh
+      run: |
+        # 下载并解压 MRE SDK 3.0
+        Invoke-WebRequest -Uri "https://github.com/raspiduino/mre-sdk/releases/download/1.0.0/MRE_SDK_3.0.00.20_Normal_Eng.zip" -OutFile "mre_sdk.zip"
+        Expand-Archive -Path "mre_sdk.zip" -DestinationPath "mre_sdk"
+        # 设置环境变量给后续步骤用
+        echo "MRE_SDK=$env:GITHUB_WORKSPACE\mre_sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Configure CMake
+      run: |
+        cmake -S . -B build -A Win32
+
+    - name: Build
+      run: |
+        cmake --build build --config Release
+
+    - name: Upload Artifact (打包产物)
+      uses: actions/upload-artifact@v4
+      with:
+        name: MREmu-Windows
+        path: bin/

@@ -24,7 +24,31 @@ sf::Texture u16text_to_texture(std::u16string str, sf::Color c) {
 
 	int x_off = 0;
 	for (int i = 0; i < str.length(); ++i) {
+		if (is_skip_symbol((VMWCHAR)str[i]))
+			continue;
+
 		int data_offset = ((unsigned int*)unifont_15_1_04_bin)[(unsigned short)str[i]];
+
+		// 缺字 fallback：CJK/扩展字符画空心方框占位
+		if (data_offset == 0) {
+			if ((unsigned short)str[i] >= 0x80) {
+				int fw = 15;
+				if (x_off >= w)
+					break;
+				int st_x = 0;
+				int end_x = std::min<int>(w, x_off + fw + 1);
+				for (int sy = st_y; sy < end_y; ++sy) {
+					for (int sx = st_x; sx < end_x; ++sx) {
+						int im_x = sx - x_off;
+						// 画 1px 边框（□形状）
+						if (im_x == 0 || im_x == fw - 1 || sy == 0 || sy == 14)
+							buf32_dst[sy * w + sx] = c;
+					}
+				}
+				x_off += fw + 1;
+			}
+			continue;
+		}
 
 		int ch_d = unifont_15_1_04_bin[data_offset];
 		int ch_w = ch_d & 0xF;
@@ -70,10 +94,16 @@ VMINT vm_graphic_get_character_height(void) {
 }
 
 VMINT vm_graphic_get_character_width(VMWCHAR c) {
+	if (is_skip_symbol(c))
+		return 0;
+
 	int data_offset = ((unsigned int*)unifont_15_1_04_bin)[(unsigned short)c];
 
-	if (data_offset == 0 || is_skip_symbol(c))
+	if (data_offset == 0) {
+		if ((unsigned short)c >= 0x80)
+			return 15; // 缺字的 CJK/扩展字符占 15px 宽度（显示□占位）
 		return 0;
+	}
 
 	int ch_d = unifont_15_1_04_bin[data_offset];
 	int ch_w = ch_d & 0xF;
@@ -85,10 +115,16 @@ VMINT vm_graphic_get_string_width(VMWSTR str) {
 		return 0;
 	int w = 0;
 	for (int i = 0; str[i]; ++i) {
+		if (is_skip_symbol(str[i]))
+			continue;
+
 		int data_offset = ((unsigned int*)unifont_15_1_04_bin)[(unsigned short)str[i]];
 
-		if (data_offset == 0 || is_skip_symbol(str[i]))
+		if (data_offset == 0) {
+			if ((unsigned short)str[i] >= 0x80)
+				w += 16; // CJK/扩展字符缺字占位 16px
 			continue;
+		}
 
 		int ch_d = unifont_15_1_04_bin[data_offset];
 		int ch_w = ch_d & 0xF;
@@ -116,10 +152,23 @@ VMINT vm_graphic_get_character_info(VMWCHAR c, vm_graphic_char_info* char_info) 
 	if (char_info == 0)
 		return -1;
 
+	if (is_skip_symbol(c))
+		return -1;
+
 	unsigned int data_offset = ((unsigned int*)unifont_15_1_04_bin)[(unsigned short)c];
 
-	if (data_offset == 0 || is_skip_symbol(c))
+	if (data_offset == 0) {
+		if ((unsigned short)c >= 0x80) {
+			// 缺字 CJK 占位
+			char_info->dwidth = 15;
+			char_info->width = 16;
+			char_info->height = 16;
+			char_info->ascent = 2;
+			char_info->descent = 0;
+			return 0;
+		}
 		return -1;
+	}
 
 	int ch_d = unifont_15_1_04_bin[data_offset];
 	int ch_w = ch_d & 0xF;
@@ -168,10 +217,34 @@ void vm_graphic_textout(VMUINT8* disp_buf, VMINT x, VMINT y, VMWSTR s, VMINT len
 
 	int x_off = x;
 	for (int i = 0; i < length && s[i]; ++i) {
+		if (is_skip_symbol(s[i]))
+			continue;
+
 		int data_offset = ((unsigned int*)unifont_15_1_04_bin)[(unsigned short)s[i]];
 
-		if (data_offset == 0 || is_skip_symbol(s[i]))
+		// 缺字 fallback：CJK/扩展字符画空心方框占位
+		if (data_offset == 0) {
+			if ((unsigned short)s[i] >= 0x80) {
+				int fw = 15;
+				if (x_off >= right)
+					break;
+				if (x_off + fw >= left) {
+					int st_x = std::max(left, x_off);
+					int end_x = std::min<int>(right, x_off + fw + 1);
+					for (int sy = st_y; sy < end_y; ++sy) {
+						for (int sx = st_x; sx < end_x; ++sx) {
+							int im_x = sx - x_off;
+							int im_y = sy - y;
+							// 画 1px 边框（□形状），内部留空
+							if (im_x == 0 || im_x == fw - 1 || im_y == 0 || im_y == 14)
+								buf16_dst[sy * cfp_dst->width + sx] = color;
+						}
+					}
+				}
+				x_off += fw + 1;
+			}
 			continue;
+		}
 
 		int ch_d = unifont_15_1_04_bin[data_offset];
 		int ch_w = ch_d & 0xF;

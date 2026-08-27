@@ -26,6 +26,10 @@ endif()
 add_definitions(-DLIBICONV_PLUG)
 set(BUILD_SHARED_LIBS FALSE) 
 
+# 强制指定 MRE SDK 路径为当前目录下的 mre_sdk 文件夹
+set(MRE_SDK_PATH "${CMAKE_SOURCE_DIR}/mre_sdk" CACHE PATH "Path to MRE SDK" FORCE)
+message(STATUS "MRE SDK path: ${MRE_SDK_PATH}")
+
 include_directories("include")
 
 add_subdirectory (deps)

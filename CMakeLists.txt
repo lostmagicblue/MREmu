@@ -35,3 +35,13 @@ include_directories("include")
 add_subdirectory (deps)
 
 add_subdirectory (MREmu)
+
+# Copy fonts/ directory next to executable at build time (optional CJK TTF fallback)
+if(IS_DIRECTORY "${CMAKE_SOURCE_DIR}/fonts")
+    add_custom_target(copy_fonts ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/fonts"
+            "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/fonts"
+        COMMENT "Copying fonts/ to bin/fonts/"
+    )
+endif()

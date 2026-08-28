@@ -357,15 +357,14 @@ void Keyboard::update_resize(int win_w, int win_h) {
 	int screen_w = (int)(screen->getScale().x * screen->getTextureRect().width);
 	int screen_h = (int)(screen->getScale().y * screen->getTextureRect().height);
 
-	// ===== 国产直板功能机：D-pad(3×4 上方) + 数字(3×4 下方) 上下竖排，共用同一 3 列窄宽 =====
-	// 完全不再左右并排，整台手机是窄长条形。
+	// ===== 国产直板功能机：D-pad(3×4 上方) + 数字(3×4 下方) 上下竖排 =====
 	sf::IntRect left, right;
 	{
-		// 键盘整体在屏幕下方，距离屏幕底部留 14px（刚好容纳外壳画的通话/OK/挂机装饰层）
-		int kb_top   = screen_y + screen_h + 14;
-		int kb_left  = (win_w - screen_w) / 2;          // 键盘和屏幕同宽对齐（屏幕左右边距=数字键左右边距，直板感）
+		// 键盘整体在屏幕下方，距离屏幕底部留 10px
+		int kb_top   = screen_y + screen_h + 10;
+		int kb_left  = (win_w - screen_w) / 2;
 		int kb_w     = screen_w;
-		int kb_h     = std::max(1, win_h - kb_top - 20); // 底部留 20px 扬声器空位
+		int kb_h     = std::max(1, win_h - kb_top - 14);
 		int kb_right = kb_left + kb_w;
 		(void)kb_right;
 
@@ -375,14 +374,12 @@ void Keyboard::update_resize(int win_w, int win_h) {
 		left  = { kb_left, kb_top + half_h, kb_w, kb_h - half_h };
 	}
 
-	// —— 键格尺寸上限（国产机键盘不能巨大）
+	// —— 键格尺寸上限 ——
 	const float MAX_KW   = 92.f;
 	const float MAX_KH_L = 48.f;
 	const float MAX_KH_R = 44.f;
 
-
-	// 数字 12 键副字母标签（和真机一致，2→abc 3→def ...）
-	// 顺序和 keys_marks_left[4][3] 完全对齐，副标签放在按键右下角。
+	// 数字 12 键副字母标签
 	static const char16_t* SUBLABEL[4][3] = {
 		{u"",     u"abc",  u"def"},
 		{u"ghi",  u"jkl",  u"mno"},
@@ -393,8 +390,8 @@ void Keyboard::update_resize(int win_w, int win_h) {
 	{
 		int w = left.width, h = left.height;
 
-		const float GAP = 5.f;          // 键与键之间的间隙（真机那种"一颗一颗分开"的感觉）
-		const float BTN_RC = 6.f;       // 按键圆角半径
+		const float GAP = 3.f;          // 减小间隙
+		const float BTN_RC = 4.f;       // 减小圆角
 
 		float kw = std::min(MAX_KW,   ((float)w - 2.f * GAP) / 3.f - GAP);
 		float kh = std::min(MAX_KH_L, ((float)h - 2.f * GAP) / 4.f - GAP);
@@ -404,7 +401,6 @@ void Keyboard::update_resize(int win_w, int win_h) {
 		int draw_h = (int)(4.f * kh + 5.f * GAP);
 		int off_x  = (w - draw_w) / 2;
 		int off_y  = (h - draw_h) / 2;
-		// 保存给 find_key_by_pos 做命中（保持单源；命中把 GAP 也算进每个格子里，用户点间隙也能命中对应键）
 		layout_left.kw    = kw + GAP;
 		layout_left.kh    = kh + GAP;
 		layout_left.cols  = 3;
@@ -418,13 +414,11 @@ void Keyboard::update_resize(int win_w, int win_h) {
 		sp_left = sf::Sprite(frontend_layer_left.getTexture());
 		sp_left.setPosition((float)left.left, (float)left.top);
 
-		// 4 行 × 3 列，逐颗画：白底圆角矩形 + 浅灰描边 + 主数字大字 + 副字母小字
 		for (int iy = 0; iy < 4; ++iy)
 			for (int ix = 0; ix < 3; ++ix) {
 				float bx = (float)off_x + GAP + (float)ix * (kw + GAP);
 				float by = (float)off_y + GAP + (float)iy * (kh + GAP);
 
-				// —— 按键底（白底圆角）
 				sf::RectangleShape btn(sf::Vector2f(kw, kh));
 				btn.setPosition(bx, by);
 				btn.setFillColor(sf::Color(250, 250, 252));
@@ -432,7 +426,6 @@ void Keyboard::update_resize(int win_w, int win_h) {
 				btn.setOutlineThickness(1.f);
 				frontend_layer_left.draw(btn);
 
-				// 覆盖四角做圆角
 				sf::CircleShape cr(BTN_RC, 20);
 				cr.setFillColor(sf::Color(250, 250, 252));
 				cr.setOutlineColor(sf::Color(170, 172, 180));
@@ -446,13 +439,12 @@ void Keyboard::update_resize(int win_w, int win_h) {
 				drawRC(bx,         by + kh);
 				drawRC(bx + kw,    by + kh);
 
-				// —— 主数字（大，深黑，居中靠上）
 				auto tex_main = u16text_to_texture(keys_marks_left[iy][ix], sf::Color(50, 50, 58));
 				sf::Sprite sp_main(tex_main);
-				// 根据按键尺寸自适应 scale（大按键字大，小按键字小）
-				float scale_main = std::min((kh - 18.f) / std::max(1.f, (float)tex_main.getSize().y),
-				                           (kw - 14.f) / std::max(1.f, (float)tex_main.getSize().x));
+				float scale_main = std::min((kh - 14.f) / std::max(1.f, (float)tex_main.getSize().y),
+				                           (kw - 8.f) / std::max(1.f, (float)tex_main.getSize().x));
 				if (scale_main < 1.f) scale_main = 1.f;
+				if (scale_main > 1.8f) scale_main = 1.8f; // 限制最大，避免字太大
 				sp_main.setScale(scale_main, scale_main);
 				sp_main.setOrigin(
 					(float)sp_main.getTextureRect().width / 2.f,
@@ -461,12 +453,10 @@ void Keyboard::update_resize(int win_w, int win_h) {
 				                    by + kh / 2.f - 4.f * scale_main);
 				frontend_layer_left.draw(sp_main);
 
-				// —— 副字母（小，浅灰，右下角）；只有非空才画
 				const char16_t* sub = SUBLABEL[iy][ix];
 				if (sub && sub[0] != u'\0') {
 					auto tex_sub = u16text_to_texture(sub, sf::Color(120, 122, 130));
 					sf::Sprite sp_sub(tex_sub);
-					// 副字尺寸固定不放大，小一点更像真机小字
 					float scale_sub = 1.f;
 					float sw = (float)tex_sub.getSize().x * scale_sub;
 					float sh = (float)tex_sub.getSize().y * scale_sub;
@@ -483,10 +473,6 @@ void Keyboard::update_resize(int win_w, int win_h) {
 	{
 		int w = right.width, h = right.height;
 
-		// D-pad（RIGHT 区域）：和外壳装饰的 OK/D-pad/通话/挂机位置对齐，但不画任何内容。
-		// 之前两套（外壳装饰 + RIGHT 网格线+字）叠在一起是"太丑"的直接原因。
-		// 这里仍然维护 layout_right 的几何参数（给 find_key_by_pos 命中检测用），
-		// 但 frontend_layer_right 只创建透明层，display() 后全空 — 不和外壳抢视觉。
 		float kw = std::min(MAX_KW,   (float)(w - 1) / 3.f);
 		float kh = std::min(MAX_KH_R, (float)(h - 1) / 4.f);
 		int draw_w = (int)(kw * 3.f + 1.f);

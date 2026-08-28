@@ -198,78 +198,75 @@ const int key_map_left[4][3] =
 	{VM_KEY_STAR, VM_KEY_NUM0, VM_KEY_POUND}
 };
 
-const int key_map_right[2][3] =
+const int key_map_right[3][3] =
 {
-	{	 VM_KEY_LEFT,	 VM_KEY_UP,	   VM_KEY_RIGHT},
-	{VM_KEY_CLEAR,	  VM_KEY_OK,	  VM_KEY_DOWN}
+	{VM_KEY_LEFT_SOFTKEY, VM_KEY_UP,  VM_KEY_RIGHT_SOFTKEY},  // LeftS ↑ RightS
+	{VM_KEY_LEFT,         VM_KEY_OK,  VM_KEY_RIGHT},          // ←  OK  →
+	{MREMU_KEY_NONE,      VM_KEY_DOWN, MREMU_KEY_NONE}        // 空   ↓   空（占位，不画）
 };
 
 void Keyboard::draw_press_key(sf::RenderTarget* rt, int key) {
-	sf::FloatRect rect;
-	bool found = false;
-
-	// —— 软键栏两半（菜单 = 左软键，返回 = 右软键）——
-	if (key == VM_KEY_LEFT_SOFTKEY) {
-		rect = softbar_l;
-		found = true;
-	}
-	else if (key == VM_KEY_RIGHT_SOFTKEY) {
-		rect = softbar_r;
-		found = true;
-	}
+	sf::Vector2f sp_pos;
+	float kw = 0.f, kh = 0.f;
+	int x = -1, y = 0;
 
 	// —— 数字区（4×3）——
-	if (!found) {
-		int x = -1, y = 0;
-		if (VM_KEY_NUM1 <= key && key <= VM_KEY_NUM9) {
-			x = (key - VM_KEY_NUM1) % 3;
-			y = (key - VM_KEY_NUM1) / 3;
-		}
-		else
-			switch (key) {
-			case VM_KEY_STAR:
-				x = 0, y = 3;
-				break;
-			case VM_KEY_NUM0:
-				x = 1, y = 3;
-				break;
-			case VM_KEY_POUND:
-				x = 2, y = 3;
-				break;
-			}
-
-		if (x != -1) {
-			rect = sf::FloatRect(
-				sp_left.getPosition().x + x * layout_left.kw,
-				sp_left.getPosition().y + y * layout_left.kh,
-				layout_left.kw, layout_left.kh);
-			found = true;
-		}
+	if (VM_KEY_NUM1 <= key && key <= VM_KEY_NUM9) {
+		x = (key - VM_KEY_NUM1) % 3;
+		y = (key - VM_KEY_NUM1) / 3;
+		sp_pos = sp_left.getPosition();
+		kw = layout_left.kw;
+		kh = layout_left.kh;
 	}
+	else
+		switch (key) {
+		case VM_KEY_STAR:
+			x = 0, y = 3;
+			sp_pos = sp_left.getPosition();
+			kw = layout_left.kw;
+			kh = layout_left.kh;
+			break;
+		case VM_KEY_NUM0:
+			x = 1, y = 3;
+			sp_pos = sp_left.getPosition();
+			kw = layout_left.kw;
+			kh = layout_left.kh;
+			break;
+		case VM_KEY_POUND:
+			x = 2, y = 3;
+			sp_pos = sp_left.getPosition();
+			kw = layout_left.kw;
+			kh = layout_left.kh;
+			break;
+		}
 
-	// —— 导航区（2×3）——
-	if (!found) {
+	// —— 导航区（3×3：LeftS ↑ RightS / ← OK → / 空 ↓ 空）——
+	if (x == -1) {
 		for (int i = 0; i < GRID_NAV_ROWS; ++i)
 			for (int j = 0; j < 3; ++j)
 				if (key_map_right[i][j] == key) {
-					rect = sf::FloatRect(
-						sp_right.getPosition().x + j * layout_right.kw,
-						sp_right.getPosition().y + i * layout_right.kh,
-						layout_right.kw, layout_right.kh);
-					found = true;
+					x = j, y = i;
+					sp_pos = sp_right.getPosition();
+					kw = layout_right.kw;
+					kh = layout_right.kh;
 					break;
 				}
 	}
 
-	if (!found)
+	if (x == -1)
 		return;
 
-	// 半透明白高亮：蓝底格子上像按下的反光
+	// 按下效果：键面（避开间隙）叠一层半透明深色，对应 HTML 的 :active 内阴影
+	float bx = sp_pos.x + x * kw + KEY_GAP / 2.f;
+	float by = sp_pos.y + y * kh + KEY_GAP / 2.f;
+	float bw = kw - KEY_GAP;
+	float bh = kh - KEY_GAP;
+
 	sf::Vertex v[4] = {
-		sf::Vertex(sf::Vector2f(rect.left,               rect.top),                sf::Color(255, 255, 255, 80)),
-		sf::Vertex(sf::Vector2f(rect.left + rect.width,  rect.top),                sf::Color(255, 255, 255, 80)),
-		sf::Vertex(sf::Vector2f(rect.left + rect.width,  rect.top + rect.height),  sf::Color(255, 255, 255, 80)),
-		sf::Vertex(sf::Vector2f(rect.left,               rect.top + rect.height),  sf::Color(255, 255, 255, 80)),
+		sf::Vertex(sf::Vector2f(bx,      by),      sf::Color(0, 0, 0, 45)),
+		sf::Vertex(sf::Vector2f(bx + bw, by),      sf::Color(0, 0, 0, 45)),
+		sf::Vertex(sf::Vector2f(bx + bw, by + bh), sf::Color(0, 0, 0, 45)),
+		sf::Vertex(sf::Vector2f(bx,      by + bh), sf::Color(0, 0, 0, 45)),
 	};
 	rt->draw(v, 4, sf::TriangleFan);
 }
@@ -283,12 +280,6 @@ static bool in_box(int x, int y, sf::Sprite sp) {
 }
 
 int Keyboard::find_key_by_pos(int px, int py) {
-	// 软键栏两半（菜单/返回）— 屏幕正下方那条横条
-	if (softbar_l.contains((float)px, (float)py))
-		return VM_KEY_LEFT_SOFTKEY;
-	if (softbar_r.contains((float)px, (float)py))
-		return VM_KEY_RIGHT_SOFTKEY;
-
 	if (in_box(px, py, sp_left)) {
 		int x = (int)sp_left.getPosition().x + layout_left.off_x;
 		int y = (int)sp_left.getPosition().y + layout_left.off_y;
@@ -342,109 +333,115 @@ const char16_t* keys_marks_left[4][3] = {
 	{u"*", u"0", u"#"},
 };
 
-const char16_t* keys_marks_right[2][3] = {
-	{u"\u2190", u"\u2191", u"\u2192"},   // ← ↑ →
-	{u"C",      u"OK",   u"\u2193"},    // C  OK  ↓
+const char16_t* keys_marks_right[3][3] = {
+	{u"菜单",   u"\u2191", u"返回"},    // 左选择键 / ↑ / 右选择键
+	{u"\u2190", u"OK",    u"\u2192"},  // ←  OK  →
+	{u"",       u"\u2193", u""},       // 空占位 / ↓ / 空占位（不画）
 };
 
-// 键盘格子的外观（参照真机 VXP 截图：蓝底 + 白字 + 细白格线，一整块对齐）
-static const sf::Color KB_CELL(26, 156, 224);   // 格子蓝
-static const sf::Color KB_LINE(235, 243, 250);  // 格线浅白
+// 白色圆角按键（对照 HTML 样式稿：白底 + 浅灰描边 + 4px 圆角 + 底部浅阴影 + 深灰字）
+static void draw_rounded_box(sf::RenderTexture& rt, float x, float y, float w, float h,
+                             sf::Color fill, sf::Color line) {
+	sf::RectangleShape body(sf::Vector2f(w, h));
+	body.setPosition(x, y);
+	body.setFillColor(fill);
+	if (line.a) {
+		body.setOutlineColor(line);
+		body.setOutlineThickness(1.f);
+	}
+	rt.draw(body);
 
-// 在 layer 上画一个 rows×3 的网格块（格子内缩 1px 露出底色 → 均匀细格线）
-static void draw_key_grid(sf::RenderTexture& layer, int rows,
-                          const char16_t* marks[][3]) {
+	sf::CircleShape c(4.f, 12);
+	c.setFillColor(fill);
+	if (line.a) {
+		c.setOutlineColor(line);
+		c.setOutlineThickness(1.f);
+	}
+	auto corner = [&](float cx, float cy) {
+		c.setPosition(cx - 4.f, cy - 4.f);
+		rt.draw(c);
+	};
+	corner(x, y);
+	corner(x + w, y);
+	corner(x, y + h);
+	corner(x + w, y + h);
+}
+
+// 画一个 rows×3 的按键块；key_map 里 MREMU_KEY_NONE 的格子是空占位，透出机身灰底
+static void draw_key_grid(sf::RenderTexture& layer, int rows, float kh_real,
+                          const char16_t* marks[][3], const int key_map[][3]) {
 	float kw = (float)layer.getSize().x / 3.f;
-	float kh = (float)layer.getSize().y / rows;
 
 	for (int iy = 0; iy < rows; ++iy)
 		for (int ix = 0; ix < 3; ++ix) {
-			sf::RectangleShape cell(sf::Vector2f(kw - 2.f, kh - 2.f));
-			cell.setPosition(ix * kw + 1.f, iy * kh + 1.f);
-			cell.setFillColor(KB_CELL);
-			layer.draw(cell);
+			if (key_map[iy][ix] == MREMU_KEY_NONE)
+				continue;
 
-			auto tex = u16text_to_texture(marks[iy][ix], sf::Color::White);
+			float bx = ix * kw + KEY_GAP / 2.f;
+			float by = iy * (kh_real + KEY_GAP) + KEY_GAP / 2.f;
+			float bw = kw - KEY_GAP;
+			float bh = kh_real;
+
+			// 底部浅阴影（下移 1px 的深色圆角块）
+			draw_rounded_box(layer, bx, by + 1.f, bw, bh, sf::Color(0, 0, 0, 22), sf::Color::Transparent);
+			// 键体：白底 + 浅灰描边
+			draw_rounded_box(layer, bx, by, bw, bh, sf::Color::White, sf::Color(208, 208, 208));
+
+			// 键面文字：深灰 #333，居中，按格子尺寸自适应
+			auto tex = u16text_to_texture(marks[iy][ix], sf::Color(51, 51, 51));
 			sf::Sprite sp(tex);
-			float s = std::min((kh - 14.f) / std::max(1.f, (float)tex.getSize().y),
-			                   (kw * 0.6f) / std::max(1.f, (float)tex.getSize().x));
+			float s = std::min((bh - 14.f) / std::max(1.f, (float)tex.getSize().y),
+			                   (bw * 0.7f) / std::max(1.f, (float)tex.getSize().x));
 			if (s > 1.6f) s = 1.6f;
 			if (s < 1.f) s = 1.f;
 			sp.setScale(s, s);
-			sp.setPosition(ix * kw + (kw - (float)tex.getSize().x * s) / 2.f,
-			               iy * kh + (kh - (float)tex.getSize().y * s) / 2.f);
+			sp.setPosition(bx + (bw - (float)tex.getSize().x * s) / 2.f,
+			               by + (bh - (float)tex.getSize().y * s) / 2.f);
 			layer.draw(sp);
 		}
 }
 
 void Keyboard::update_resize(int win_w, int win_h) {
-	int screen_x = (int)screen->getPosition().x;
 	int screen_y = (int)screen->getPosition().y;
-	(void)screen_x;
 	int screen_h = (int)(screen->getScale().y * screen->getTextureRect().height);
 
-	// ===== 布局（参照真机 VXP 截图，自上而下，全部满窗宽、零留白）=====
-	// [屏幕] [软键栏 菜单|返回] [导航 2×3] [数字 4×3]
-	float sb_y = (float)(screen_y + screen_h);
-	softbar_l = sf::FloatRect(0.f,         sb_y, (float)win_w / 2.f, SOFTBAR_H);
-	softbar_r = sf::FloatRect((float)win_w / 2.f, sb_y, (float)win_w / 2.f, SOFTBAR_H);
+	// ===== 布局（对照 HTML 样式稿）：浅灰机身留白 + 黑屏 + 导航 3×3 + 数字 4×3，白色圆角键 =====
+	float col_w = (float)win_w - 2.f * BODY_PAD;
+	float top   = (float)(screen_y + screen_h) + BODY_GAP;
+	float nav_h = GRID_NAV_ROWS * NAV_KH + (GRID_NAV_ROWS - 1) * KEY_GAP;
 
-	int   grid_top = screen_y + screen_h + (int)SOFTBAR_H;
-	int   grid_h   = std::max(1, win_h - grid_top);
-	float kw       = (float)win_w / 3.f;
-	float kh       = (float)grid_h / (GRID_NAV_ROWS + GRID_NUM_ROWS);
-
-	// —— 导航 2×3（在上）——
+	// —— 导航 3×3（LeftS ↑ RightS / ← OK → / 空 ↓ 空）——
 	{
-		int h = (int)(kh * GRID_NAV_ROWS);
+		layout_right.kw = col_w / 3.f;
+		layout_right.kh = NAV_KH + KEY_GAP;   // 命中格子含下方间隙，区域连贯好点
+		layout_right.cols = 3;                layout_right.rows = GRID_NAV_ROWS;
+		layout_right.off_x = 0;               layout_right.off_y = 0;
 
-		layout_right.kw = kw;  layout_right.kh = kh;
-		layout_right.cols = 3; layout_right.rows = GRID_NAV_ROWS;
-		layout_right.off_x = 0; layout_right.off_y = 0;
-
-		frontend_layer_right.create(win_w, h);
-		frontend_layer_right.clear(KB_LINE);
-		draw_key_grid(frontend_layer_right, GRID_NAV_ROWS, keys_marks_right);
+		frontend_layer_right.create((int)col_w, (int)nav_h);
+		frontend_layer_right.clear(sf::Color::Transparent);   // 键缝透出浅灰机身底
+		draw_key_grid(frontend_layer_right, GRID_NAV_ROWS, NAV_KH, keys_marks_right, key_map_right);
 		frontend_layer_right.display();
 
 		sp_right = sf::Sprite(frontend_layer_right.getTexture());
-		sp_right.setPosition(0.f, (float)grid_top);
+		sp_right.setPosition(BODY_PAD, top);
 	}
 
-	// —— 数字 4×3（在导航下面）——
+	// —— 数字 4×3 ——
 	{
-		int h = (int)(kh * GRID_NUM_ROWS);
+		float top2  = top + nav_h + BODY_GAP;
+		float num_h = GRID_NUM_ROWS * NUM_KH + (GRID_NUM_ROWS - 1) * KEY_GAP;
 
-		layout_left.kw = kw;  layout_left.kh = kh;
-		layout_left.cols = 3; layout_left.rows = GRID_NUM_ROWS;
-		layout_left.off_x = 0; layout_left.off_y = 0;
+		layout_left.kw = col_w / 3.f;
+		layout_left.kh = NUM_KH + KEY_GAP;
+		layout_left.cols = 3;                 layout_left.rows = GRID_NUM_ROWS;
+		layout_left.off_x = 0;                layout_left.off_y = 0;
 
-		frontend_layer_left.create(win_w, h);
-		frontend_layer_left.clear(KB_LINE);
-		draw_key_grid(frontend_layer_left, GRID_NUM_ROWS, keys_marks_left);
+		frontend_layer_left.create((int)col_w, (int)num_h);
+		frontend_layer_left.clear(sf::Color::Transparent);
+		draw_key_grid(frontend_layer_left, GRID_NUM_ROWS, NUM_KH, keys_marks_left, key_map_left);
 		frontend_layer_left.display();
 
 		sp_left = sf::Sprite(frontend_layer_left.getTexture());
-		sp_left.setPosition(0.f, (float)grid_top + kh * GRID_NAV_ROWS);
+		sp_left.setPosition(BODY_PAD, top2);
 	}
-}
-
-void Keyboard::draw_softbar(sf::RenderTarget* rt) {
-	// 软键栏：屏幕正下方一条深蓝横条，左「菜单」= 左软键，右「返回」= 右软键（两半都可点击）
-	float w = softbar_l.width + softbar_r.width;
-	float y = softbar_l.top;
-
-	sf::RectangleShape bar(sf::Vector2f(w, SOFTBAR_H));
-	bar.setPosition(0.f, y);
-	bar.setFillColor(sf::Color(33, 88, 148));
-	rt->draw(bar);
-
-	auto tex_l = u16text_to_texture(u"菜单", sf::Color::White);
-	auto tex_r = u16text_to_texture(u"返回", sf::Color::White);
-	sf::Sprite sl(tex_l), sr(tex_r);
-	sl.setPosition(10.f, y + (SOFTBAR_H - (float)tex_l.getSize().y) / 2.f);
-	sr.setPosition(w - (float)tex_r.getSize().x - 10.f,
-	               y + (SOFTBAR_H - (float)tex_r.getSize().y) / 2.f);
-	rt->draw(sl);
-	rt->draw(sr);
 }

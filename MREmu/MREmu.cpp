@@ -72,9 +72,8 @@ void mre_main(AppManager* appManager_p) {
 	}
 }
 
-// 旧「手机外壳」装饰绘制已整体删除：现在窗口 = 屏幕 + 软键栏 + 键盘网格，
-// 三块内容铺满整个窗口，没有任何机身背景/听筒/摄像头/通话挂机装饰。
-// 软键栏（菜单/返回）的绘制在 Keyboard::draw_softbar()，几何常量在 Keyboard.h。
+// 旧「手机外壳」装饰绘制已整体删除：现在窗口就是浅灰直板机身（HTML 样式稿），
+// 黑屏 + 导航 3×3 + 数字 4×3 白色圆角键，几何常量全部在 Keyboard.h。
 
 int main(int argc, char** argv) {
     std::string app_path = "";
@@ -132,12 +131,16 @@ int main(int argc, char** argv) {
 	MREngine::Graphic graphic;
 
 #ifndef ANDROID
-	// 窗口 = 内容本身，紧凑无留白：屏幕（满窗宽）→ 软键栏（菜单/返回）→ 6×3 网格键盘。
-	// 几何常量在 Keyboard.h（SOFTBAR_H / GRID_NAV_ROWS / GRID_NUM_ROWS / GRID_KH），
+	// 窗口 = 浅灰直板机身（HTML 样式稿 1:1）：黑屏（满内容列宽）+ 导航 3×3 + 数字 4×3 白色圆角键。
+	// 几何常量在 Keyboard.h（BODY_PAD / KEY_GAP / NAV_KH / NUM_KH / SCR_SCALE），
 	// MREmu.cpp 和 Keyboard.cpp 用同一份，窗口尺寸和内部布局永远对得上。
 	sf::RenderWindow win_device(sf::VideoMode(
-		(unsigned)(graphic.width * 1.5f),
-		(unsigned)(graphic.height * 1.5f + SOFTBAR_H + (GRID_NAV_ROWS + GRID_NUM_ROWS) * GRID_KH)),
+		(unsigned)(graphic.width * SCR_SCALE + 2.f * BODY_PAD),
+		(unsigned)(BODY_PAD + graphic.height * SCR_SCALE + BODY_GAP
+			+ (GRID_NAV_ROWS * NAV_KH + (GRID_NAV_ROWS - 1) * KEY_GAP)
+			+ BODY_GAP
+			+ (GRID_NUM_ROWS * NUM_KH + (GRID_NUM_ROWS - 1) * KEY_GAP)
+			+ BODY_PAD)),
 		"MREmu");
 
 	// ImGui 绑定到 win_device（仅用来画数字键盘按钮 + VXP Error 弹窗）
@@ -195,10 +198,10 @@ int main(int argc, char** argv) {
 	keyboard.screen = &screen_sp;
 
 	auto update_screen_size = [&] {
-		// 屏幕永远占满窗口宽度、顶在 (0,0)：窗口多宽，屏幕就多宽（下面接软键栏和键盘）
-		float sx = (float)win_device.getSize().x / (float)graphic.width;
+		// 屏幕顶在 (BODY_PAD, BODY_PAD)，宽度 = 窗口宽 - 两侧留白（默认正好 360×480）
+		float sx = ((float)win_device.getSize().x - 2.f * BODY_PAD) / (float)graphic.width;
 		screen_sp.setScale(sx, sx);
-		screen_sp.setPosition(0.f, 0.f);
+		screen_sp.setPosition(BODY_PAD, BODY_PAD);
 
 		keyboard.update_resize((int)win_device.getSize().x, (int)win_device.getSize().y);
 	};
@@ -248,14 +251,13 @@ int main(int argc, char** argv) {
 
 		graphic.update_screen();
 
-		// ========== 设备窗口：屏幕 + 软键栏 + 键盘网格（三块铺满，ImGui 只用于错误弹窗）==========
-		win_device.clear(sf::Color(33, 88, 148));  // 软键栏深蓝（窗口尺寸刚好铺满时几乎看不到）
+		// ========== 设备窗口：浅灰机身 + 黑屏 + 白色圆角键盘（ImGui 只用于错误弹窗）==========
+		win_device.clear(sf::Color(229, 229, 229));  // 机身浅灰 #e5e5e5
 		{
 			screen_sp.setTexture(graphic.screen_tex, true);
 			win_device.draw(screen_sp);
 		}
 #ifndef ANDROID
-		keyboard.draw_softbar(&win_device);
 		keyboard.draw(&win_device);
 
 		// ImGui 内容：仅 VXP Error 弹窗

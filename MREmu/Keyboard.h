@@ -15,12 +15,15 @@
 #define MREMU_NEGATIVE_KEY_COUNT VM_KEY_BACK
 #define MREMU_FULL_KEY_COUNT (MREMU_KEY_POWER + 1 + MREMU_NEGATIVE_KEY_COUNT)
 
-// 共享几何常量：MREmu.cpp（窗口大小/清屏色）和 Keyboard.cpp（绘制/命中）用同一份，避免漂移。
-// 布局自上而下：屏幕（满窗宽）→ 软键栏 → 6 行 × 3 列网格键盘，窗口即内容，无多余背景。
-constexpr float SOFTBAR_H     = 26.f;  // 软键栏（菜单/返回）高度
-constexpr int   GRID_NAV_ROWS = 2;     // 键盘导航行数（← ↑ → / C OK ↓）
-constexpr int   GRID_NUM_ROWS = 4;     // 键盘数字行数（123/456/789/*0#）
-constexpr float GRID_KH       = 38.f;  // 单行高度
+// 共享几何常量（对照 HTML 样式稿）：MREmu.cpp（窗口大小/清屏色）和 Keyboard.cpp（绘制/命中）
+// 用同一份，避免漂移。布局自上而下：黑屏（满内容列宽）→ 导航 3×3 → 数字 4×3，白色圆角键。
+constexpr float BODY_PAD      = 6.f;   // 机身四周浅灰留白
+constexpr float KEY_GAP       = 6.f;   // 键与键、区块之间的间隙
+constexpr float NAV_KH        = 40.f;  // 导航键行高
+constexpr float NUM_KH        = 42.f;  // 数字键行高
+constexpr float SCR_SCALE     = 1.5f;  // 屏幕放大倍数（240×320 → 360×480）
+constexpr int   GRID_NAV_ROWS = 3;     // 导航行数：LeftS ↑ RightS / ← OK → / 空 ↓ 空
+constexpr int   GRID_NUM_ROWS = 4;     // 数字行数：123 / 456 / 789 / *0#
 
 class KeyboardControl {
 public:
@@ -95,10 +98,6 @@ public:
 	GridLayout layout_left;
 	GridLayout layout_right;
 
-	// 软键栏（屏幕正下方一条横条）左右两半的命中区域，各对应一个软键
-	sf::FloatRect softbar_l;
-	sf::FloatRect softbar_r;
-
 	sf::Sprite *screen;
 
 	bool event(sf::Event& event);
@@ -108,8 +107,6 @@ public:
 	void imgui_keyboard();
 
 	void draw(sf::RenderTarget* rt);
-
-	void draw_softbar(sf::RenderTarget* rt);
 
 	void draw_press_key(sf::RenderTarget* rt, int key);
 

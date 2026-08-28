@@ -15,6 +15,13 @@
 #define MREMU_NEGATIVE_KEY_COUNT VM_KEY_BACK
 #define MREMU_FULL_KEY_COUNT (MREMU_KEY_POWER + 1 + MREMU_NEGATIVE_KEY_COUNT)
 
+// 共享几何常量：MREmu.cpp（窗口大小/清屏色）和 Keyboard.cpp（绘制/命中）用同一份，避免漂移。
+// 布局自上而下：屏幕（满窗宽）→ 软键栏 → 6 行 × 3 列网格键盘，窗口即内容，无多余背景。
+constexpr float SOFTBAR_H     = 26.f;  // 软键栏（菜单/返回）高度
+constexpr int   GRID_NAV_ROWS = 2;     // 键盘导航行数（← ↑ → / C OK ↓）
+constexpr int   GRID_NUM_ROWS = 4;     // 键盘数字行数（123/456/789/*0#）
+constexpr float GRID_KH       = 38.f;  // 单行高度
+
 class KeyboardControl {
 public:
 	enum key_source {
@@ -88,6 +95,10 @@ public:
 	GridLayout layout_left;
 	GridLayout layout_right;
 
+	// 软键栏（屏幕正下方一条横条）左右两半的命中区域，各对应一个软键
+	sf::FloatRect softbar_l;
+	sf::FloatRect softbar_r;
+
 	sf::Sprite *screen;
 
 	bool event(sf::Event& event);
@@ -97,6 +108,8 @@ public:
 	void imgui_keyboard();
 
 	void draw(sf::RenderTarget* rt);
+
+	void draw_softbar(sf::RenderTarget* rt);
 
 	void draw_press_key(sf::RenderTarget* rt, int key);
 

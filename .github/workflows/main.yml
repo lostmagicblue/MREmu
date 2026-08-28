@@ -32,8 +32,11 @@ jobs:
         echo "MRE_SDK=$env:GITHUB_WORKSPACE\mre_sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: Configure CMake
+      shell: pwsh
       run: |
-        # 关键修复！强制传入 MRE_SDK_PATH，解决找不到头文件的问题
+        # 强制 clean configure：VS 生成器下旧 .vcxproj 缓存会导致新加的源文件（UiLogSink.cpp）
+        # 没有被塞进工程 → 链接阶段 LNK2019。每次配置前都删掉 build/ 保证从干净状态开始。
+        if (Test-Path build) { Remove-Item -Recurse -Force build }
         cmake -S . -B build -A Win32 -DMRE_SDK_PATH=$env:GITHUB_WORKSPACE\mre_sdk
 
     - name: Build

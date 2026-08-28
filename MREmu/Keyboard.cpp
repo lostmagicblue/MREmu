@@ -381,18 +381,32 @@ void Keyboard::update_resize(int win_w, int win_h) {
 	const float MAX_KH_R = 44.f;
 
 
+	// 数字 12 键副字母标签（和真机一致，2→abc 3→def ...）
+	// 顺序和 keys_marks_left[4][3] 完全对齐，副标签放在按键右下角。
+	static const char* SUBLABEL[4][3] = {
+		{"",     "abc",  "def"},
+		{"ghi",  "jkl",  "mno"},
+		{"pqrs", "tuv",  "wxyz"},
+		{"+",    "",     u8"#"}
+	};
+
 	{
 		int w = left.width, h = left.height;
 
-		float kw = std::min(MAX_KW,   (float)(w - 1) / 3.f);
-		float kh = std::min(MAX_KH_L, (float)(h - 1) / 4.f);
-		int draw_w = (int)(kw * 3.f + 1.f);
-		int draw_h = (int)(kh * 4.f + 1.f);
+		const float GAP = 5.f;          // 键与键之间的间隙（真机那种"一颗一颗分开"的感觉）
+		const float BTN_RC = 6.f;       // 按键圆角半径
+
+		float kw = std::min(MAX_KW,   ((float)w - 2.f * GAP) / 3.f - GAP);
+		float kh = std::min(MAX_KH_L, ((float)h - 2.f * GAP) / 4.f - GAP);
+		if (kw < 28.f) kw = 28.f;
+		if (kh < 36.f) kh = 36.f;
+		int draw_w = (int)(3.f * kw + 4.f * GAP);
+		int draw_h = (int)(4.f * kh + 5.f * GAP);
 		int off_x  = (w - draw_w) / 2;
 		int off_y  = (h - draw_h) / 2;
-		// 保存给 find_key_by_pos 做命中（保持单源）
-		layout_left.kw    = kw;
-		layout_left.kh    = kh;
+		// 保存给 find_key_by_pos 做命中（保持单源；命中把 GAP 也算进每个格子里，用户点间隙也能命中对应键）
+		layout_left.kw    = kw + GAP;
+		layout_left.kh    = kh + GAP;
 		layout_left.cols  = 3;
 		layout_left.rows  = 4;
 		layout_left.off_x = off_x;
@@ -404,54 +418,78 @@ void Keyboard::update_resize(int win_w, int win_h) {
 		sp_left = sf::Sprite(frontend_layer_left.getTexture());
 		sp_left.setPosition((float)left.left, (float)left.top);
 
-		int font_scale = std::max<int>((int)(kw / 16.f), 1);
-
-		std::vector<sf::Vertex> lines;
-
-		for (int ix = 0; ix < 4; ++ix) {
-			float x = (float)off_x + (float)ix * kw;
-			lines.push_back(sf::Vertex(sf::Vector2f(x + 1.f, (float)off_y)));
-			lines.push_back(sf::Vertex(sf::Vector2f(x + 1.f, (float)off_y + (float)draw_h)));
-		}
-
-		for (int iy = 0; iy < 5; ++iy) {
-			float y = (float)off_y + (float)iy * kh;
-			lines.push_back(sf::Vertex(sf::Vector2f((float)off_x,              y)));
-			lines.push_back(sf::Vertex(sf::Vector2f((float)off_x + (float)draw_w, y)));
-		}
-
+		// 4 行 × 3 列，逐颗画：白底圆角矩形 + 浅灰描边 + 主数字大字 + 副字母小字
 		for (int iy = 0; iy < 4; ++iy)
 			for (int ix = 0; ix < 3; ++ix) {
-				auto tex = u16text_to_texture(keys_marks_left[iy][ix], sf::Color::White);
-				sf::Sprite sp(tex);
-				sp.setOrigin(
-					(float)(sp.getTextureRect().width  / 2),
-					(float)(sp.getTextureRect().height / 2));
-				sp.setPosition(
-					(float)off_x + (float)ix * kw + kw / 2.f,
-					(float)off_y + (float)iy * kh + kh / 2.f);
-				sp.setScale((float)font_scale, (float)font_scale);
-				frontend_layer_left.draw(sp);
+				float bx = (float)off_x + GAP + (float)ix * (kw + GAP);
+				float by = (float)off_y + GAP + (float)iy * (kh + GAP);
+
+				// —— 按键底（白底圆角）
+				sf::RectangleShape btn(sf::Vector2f(kw, kh));
+				btn.setPosition(bx, by);
+				btn.setFillColor(sf::Color(250, 250, 252));
+				btn.setOutlineColor(sf::Color(170, 172, 180));
+				btn.setOutlineThickness(1.f);
+				frontend_layer_left.draw(btn);
+
+				// 覆盖四角做圆角
+				sf::CircleShape cr(BTN_RC, 20);
+				cr.setFillColor(sf::Color(250, 250, 252));
+				cr.setOutlineColor(sf::Color(170, 172, 180));
+				cr.setOutlineThickness(1.f);
+				auto drawRC = [&](float cx, float cy) {
+					cr.setPosition(cx - BTN_RC, cy - BTN_RC);
+					frontend_layer_left.draw(cr);
+				};
+				drawRC(bx,         by);
+				drawRC(bx + kw,    by);
+				drawRC(bx,         by + kh);
+				drawRC(bx + kw,    by + kh);
+
+				// —— 主数字（大，深黑，居中靠上）
+				auto tex_main = u16text_to_texture(keys_marks_left[iy][ix], sf::Color(50, 50, 58));
+				sf::Sprite sp_main(tex_main);
+				// 根据按键尺寸自适应 scale（大按键字大，小按键字小）
+				float scale_main = std::min((kh - 18.f) / std::max(1.f, (float)tex_main.getSize().y),
+				                           (kw - 14.f) / std::max(1.f, (float)tex_main.getSize().x));
+				if (scale_main < 1.f) scale_main = 1.f;
+				sp_main.setScale(scale_main, scale_main);
+				sp_main.setOrigin(
+					(float)sp_main.getTextureRect().width / 2.f,
+					(float)sp_main.getTextureRect().height / 2.f);
+				sp_main.setPosition(bx + kw / 2.f - scale_main,
+				                    by + kh / 2.f - 4.f * scale_main);
+				frontend_layer_left.draw(sp_main);
+
+				// —— 副字母（小，浅灰，右下角）；只有非空才画
+				const char* sub = SUBLABEL[iy][ix];
+				if (sub && sub[0] != '\0') {
+					sf::Text sub_txt;
+					sub_txt.setString(sub);
+					sub_txt.setCharacterSize(10);
+					sub_txt.setFillColor(sf::Color(120, 122, 130));
+					sub_txt.setPosition(bx + kw - (float)sub_txt.getLocalBounds().width - 4.f - 2.f,
+					                    by + kh - 11.f - 2.f);
+					frontend_layer_left.draw(sub_txt);
+				}
 			}
 
-		for (size_t i = 0; i < lines.size(); ++i)
-			lines[i].color = sf::Color::White;
-
-		frontend_layer_left.draw(lines.data(), lines.size(), sf::Lines);
 		frontend_layer_left.display();
 	}
 
 	{
 		int w = right.width, h = right.height;
 
-		// D-pad 网格（3 列 × 4 行）和 LEFT 数字共用 3 列宽，上下竖排更紧凑
+		// D-pad（RIGHT 区域）：和外壳装饰的 OK/D-pad/通话/挂机位置对齐，但不画任何内容。
+		// 之前两套（外壳装饰 + RIGHT 网格线+字）叠在一起是"太丑"的直接原因。
+		// 这里仍然维护 layout_right 的几何参数（给 find_key_by_pos 命中检测用），
+		// 但 frontend_layer_right 只创建透明层，display() 后全空 — 不和外壳抢视觉。
 		float kw = std::min(MAX_KW,   (float)(w - 1) / 3.f);
 		float kh = std::min(MAX_KH_R, (float)(h - 1) / 4.f);
 		int draw_w = (int)(kw * 3.f + 1.f);
 		int draw_h = (int)(kh * 4.f + 1.f);
 		int off_x  = (w - draw_w) / 2;
 		int off_y  = (h - draw_h) / 2;
-		// 保存给 find_key_by_pos
 		layout_right.kw    = kw;
 		layout_right.kh    = kh;
 		layout_right.cols  = 3;
@@ -461,49 +499,8 @@ void Keyboard::update_resize(int win_w, int win_h) {
 
 		frontend_layer_right.create(w, h);
 		frontend_layer_right.clear(sf::Color::Transparent);
-
 		sp_right = sf::Sprite(frontend_layer_right.getTexture());
 		sp_right.setPosition((float)right.left, (float)right.top);
-
-		int font_scale = std::max<int>((int)(kw / 16.f), 1);
-
-		std::vector<sf::Vertex> lines;
-
-		for (int iy = 0; iy < 3; ++iy)
-			for (int ix = 0; ix < 3; ++ix) {
-				float x = (float)off_x + (float)ix * kw + 1.f;
-				float y = (float)off_y + (float)iy * kh;
-				if (!(std::abs(ix - 1) == 1 && std::abs(iy - 1)) == 1)
-					y += kh / 2.f;
-				else if (iy == 2)
-					y += kh;
-
-				lines.push_back(sf::Vertex(sf::Vector2f(x, y)));
-				lines.push_back(sf::Vertex(sf::Vector2f(x + kw, y)));
-
-				lines.push_back(sf::Vertex(sf::Vector2f(x + kw, y)));
-				lines.push_back(sf::Vertex(sf::Vector2f(x + kw, y + kh)));
-
-				lines.push_back(sf::Vertex(sf::Vector2f(x + kw, y + kh)));
-				lines.push_back(sf::Vertex(sf::Vector2f(x, y + kh)));
-
-				lines.push_back(sf::Vertex(sf::Vector2f(x, y + kh)));
-				lines.push_back(sf::Vertex(sf::Vector2f(x, y)));
-
-				auto tex = u16text_to_texture(keys_marks_right[iy][ix], sf::Color::White);
-				sf::Sprite sp(tex);
-				sp.setOrigin(
-					(float)(sp.getTextureRect().width  / 2),
-					(float)(sp.getTextureRect().height / 2));
-				sp.setPosition(x + kw / 2.f, y + kh / 2.f);
-				sp.setScale((float)font_scale, (float)font_scale);
-				frontend_layer_right.draw(sp);
-			}
-
-		for (size_t i = 0; i < lines.size(); ++i)
-			lines[i].color = sf::Color::White;
-
-		frontend_layer_right.draw(lines.data(), lines.size(), sf::Lines);
 		frontend_layer_right.display();
 	}
 }

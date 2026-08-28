@@ -1,4 +1,4 @@
-﻿cmake_minimum_required (VERSION 3.8)
+cmake_minimum_required (VERSION 3.8)
 
 set(SOURCES 
 						"MREmu.cpp" "MREmu.h" 
@@ -17,6 +17,7 @@ set(SOURCES
 						"Keyboard.cpp" "Keyboard.h"
 						"Touch.cpp" "Touch.h"
 						"Log.cpp" "Log.h" 
+						"UiLogSink.cpp" "UiLogSink.h"
 						"miniz.c" "miniz.h" "mutex_wrapper.h"
 						"jni/Vibration.cpp" "jni/Vibration.h"
 )
@@ -27,8 +28,23 @@ else()
 	add_executable(MREmu ${SOURCES})
 endif()
 
+# —— 关键修复：Visual Studio / MSBuild 多配置生成器下，add_executable(${SOURCES}) 里如果
+#    有在「首次 configure 之后新加入 set(SOURCES)」的文件，.vcxproj 不一定更新进去。
+#    target_sources(MREmu PRIVATE …) 是强制把这两个编译单元绑定到 MREmu 目标，跨所有
+#    生成器（VS/Ninja/Xcode）、跨多次 re-configure 都稳定生效。
+target_sources(MREmu PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/UiLogSink.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/UiLogSink.h"
+)
+
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET MREmu PROPERTY CXX_STANDARD 20)
+endif()
+
+# MSVC：强制 /utf-8 源码/执行字符集。
+# （mre_sdk 里的 vmsys.h 含一些 GBK 字符，没这个就 C4828，未来还可能 C4819 甚至编不过。）
+if(MSVC)
+    target_compile_options(MREmu PRIVATE /utf-8)
 endif()
 
 target_link_libraries(MREmu sfml-graphics)

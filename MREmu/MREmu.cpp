@@ -25,6 +25,11 @@
 
 #include "NativeApps/Menu/AppSelector.h"
 
+// 外壳界面（软键文字 / 品牌字 / OK 字）用 MREngine 提供的统一 UTF-16 → 纹理渲染器，
+// 好处是：1) 自带 unifont + cjk.ttf 3 层 fallback，显示中文绝不会变□；
+// 2) 项目没有全局 sf::Font 实例，直接用 sf::Text 会退化成缺字体的方块。
+sf::Texture u16text_to_texture(std::u16string str, sf::Color c);
+
 sf::Clock global_clock;
 
 bool work = true;
@@ -110,12 +115,12 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 	// =================================================================
 	// 2. 顶部：小品牌字（类似 NOKIA 在顶左） + 听筒（顶中偏右） + 前摄（右上）
 	// =================================================================
-	sf::Text brand;
-	brand.setString("MREmu");
-	brand.setFillColor(sf::Color(60, 60, 70));
-	brand.setCharacterSize(12);
-	brand.setPosition(14.f, BODY_PAD_TOP - 4.f);
-	win.draw(brand);
+	{
+		auto tex_brand = u16text_to_texture(u"MREmu", sf::Color(60, 60, 70));
+		sf::Sprite sp_brand(tex_brand);
+		sp_brand.setPosition(14.f, BODY_PAD_TOP - 4.f);
+		win.draw(sp_brand);
+	}
 
 	sf::CircleShape ear(4.f, 28);
 	ear.setScale(2.8f, 0.5f);
@@ -149,22 +154,18 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 	// 4. 屏幕下方：一行软键标签文字（「选项」「功能表」「电话簿」）
 	// =================================================================
 	float soft_y = screen_rect.top + screen_rect.height + 10.f;
-	sf::Text soft_l, soft_c, soft_r;
-	soft_l.setString(u8"选项");
-	soft_c.setString(u8"功能表");
-	soft_r.setString(u8"电话簿");
-	soft_l.setCharacterSize(12);
-	soft_c.setCharacterSize(12);
-	soft_r.setCharacterSize(12);
-	soft_l.setFillColor(sf::Color(60, 60, 70));
-	soft_c.setFillColor(sf::Color(60, 60, 70));
-	soft_r.setFillColor(sf::Color(60, 60, 70));
-	soft_l.setPosition(18.f,                     soft_y);
-	soft_r.setPosition(win_w - 64.f,             soft_y);
-	soft_c.setPosition(cx - soft_c.getLocalBounds().width / 2.f, soft_y);
-	win.draw(soft_l);
-	win.draw(soft_c);
-	win.draw(soft_r);
+	{
+		auto tex_l = u16text_to_texture(u"选项",   sf::Color(60, 60, 70));
+		auto tex_c = u16text_to_texture(u"功能表", sf::Color(60, 60, 70));
+		auto tex_r = u16text_to_texture(u"电话簿", sf::Color(60, 60, 70));
+		sf::Sprite sp_l(tex_l), sp_c(tex_c), sp_r(tex_r);
+		sp_l.setPosition(18.f,                            soft_y);
+		sp_r.setPosition(win_w - (float)tex_r.getSize().x - 14.f, soft_y);
+		sp_c.setPosition(cx - (float)tex_c.getSize().x / 2.f,    soft_y);
+		win.draw(sp_l);
+		win.draw(sp_c);
+		win.draw(sp_r);
+	}
 
 	// =================================================================
 	// 5. D-pad + OK 主按键（中央白色圆角方形 OK + 四向凸起块）
@@ -233,12 +234,13 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 	}
 
 	// —— OK 文字
-	sf::Text okt;
-	okt.setString("OK");
-	okt.setFillColor(sf::Color(80, 80, 90));
-	okt.setCharacterSize(14);
-	okt.setPosition(cx - 12.f, ok_y + OK_SIZE / 2.f - 12.f);
-	win.draw(okt);
+	{
+		auto tex_ok = u16text_to_texture(u"OK", sf::Color(80, 80, 90));
+		sf::Sprite sp_ok(tex_ok);
+		sp_ok.setPosition(cx     - (float)tex_ok.getSize().x / 2.f,
+		                  ok_y   + OK_SIZE / 2.f - (float)tex_ok.getSize().y / 2.f);
+		win.draw(sp_ok);
+	}
 
 	// =================================================================
 	// 6. 通话（绿）/ 挂机（红）小方按钮，在 D-pad 左右两侧

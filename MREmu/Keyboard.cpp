@@ -383,11 +383,11 @@ void Keyboard::update_resize(int win_w, int win_h) {
 
 	// 数字 12 键副字母标签（和真机一致，2→abc 3→def ...）
 	// 顺序和 keys_marks_left[4][3] 完全对齐，副标签放在按键右下角。
-	static const char* SUBLABEL[4][3] = {
-		{"",     "abc",  "def"},
-		{"ghi",  "jkl",  "mno"},
-		{"pqrs", "tuv",  "wxyz"},
-		{"+",    "",     u8"#"}
+	static const char16_t* SUBLABEL[4][3] = {
+		{u"",     u"abc",  u"def"},
+		{u"ghi",  u"jkl",  u"mno"},
+		{u"pqrs", u"tuv",  u"wxyz"},
+		{u"+",    u"",     u"#"}
 	};
 
 	{
@@ -462,15 +462,18 @@ void Keyboard::update_resize(int win_w, int win_h) {
 				frontend_layer_left.draw(sp_main);
 
 				// —— 副字母（小，浅灰，右下角）；只有非空才画
-				const char* sub = SUBLABEL[iy][ix];
-				if (sub && sub[0] != '\0') {
-					sf::Text sub_txt;
-					sub_txt.setString(sub);
-					sub_txt.setCharacterSize(10);
-					sub_txt.setFillColor(sf::Color(120, 122, 130));
-					sub_txt.setPosition(bx + kw - (float)sub_txt.getLocalBounds().width - 4.f - 2.f,
-					                    by + kh - 11.f - 2.f);
-					frontend_layer_left.draw(sub_txt);
+				const char16_t* sub = SUBLABEL[iy][ix];
+				if (sub && sub[0] != u'\0') {
+					auto tex_sub = u16text_to_texture(sub, sf::Color(120, 122, 130));
+					sf::Sprite sp_sub(tex_sub);
+					// 副字尺寸固定不放大，小一点更像真机小字
+					float scale_sub = 1.f;
+					float sw = (float)tex_sub.getSize().x * scale_sub;
+					float sh = (float)tex_sub.getSize().y * scale_sub;
+					sp_sub.setScale(scale_sub, scale_sub);
+					sp_sub.setPosition(bx + kw - sw - 4.f,
+					                   by + kh - sh - 2.f);
+					frontend_layer_left.draw(sp_sub);
 				}
 			}
 

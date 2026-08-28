@@ -18,7 +18,8 @@
 // 共享几何常量（对照 HTML 样式稿）：MREmu.cpp（窗口大小/清屏色）和 Keyboard.cpp（绘制/命中）
 // 用同一份，避免漂移。布局自上而下：黑屏（满内容列宽）→ 导航 3×3 → 数字 4×3，白色圆角键。
 constexpr float BODY_PAD      = 6.f;   // 机身四周浅灰留白
-constexpr float KEY_GAP       = 6.f;   // 键与键、区块之间的间隙
+constexpr float KEY_GAP       = 6.f;   // 键与键之间的间隙
+constexpr float BODY_GAP      = 6.f;   // 区块之间（屏幕→导航区→数字区）的间隙
 constexpr float NAV_KH        = 40.f;  // 导航键行高
 constexpr float NUM_KH        = 42.f;  // 数字键行高
 constexpr float SCR_SCALE     = 1.5f;  // 屏幕放大倍数（240×320 → 360×480）

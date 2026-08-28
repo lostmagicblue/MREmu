@@ -58,7 +58,7 @@ Java_com_ximikboda_mremu_MainActivity_nativeLoadVxpFile(JNIEnv *env, jobject thi
 
     g_appManager->add_app_for_launch(path_cstr, false);
 
-    env->ReleaseStringUTFChars(path_cstr, path_cstr);
+    env->ReleaseStringUTFChars(j_path, path_cstr);
 }
 #endif
 
@@ -80,21 +80,18 @@ void mre_main(AppManager* appManager_p) {
 // ================ 手机外壳绘制（win_device 背景）================
 // 画一个圆角矩形 + 听筒 + 屏幕框（屏幕在里面，sprite 我们按 screen_sp 的位置自己放）
 static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_rect) {
-	// —— 仿诺基亚/国产直板功能机视觉规范（参数化，单点改动）——
-	const float R_CORNER    = 20.f;    // 机身边缘圆角（小，精致感）
-	const float BODY_PAD_X  = screen_rect.left;           // 屏幕左边距
-	const float BODY_PAD_TOP= screen_rect.top / 2.f;      // 顶栏品牌字高度的一半基准
+	// —— 机身 ——
+	const float R_CORNER    = 18.f;
+	const float BODY_PAD_X  = screen_rect.left;
+	const float BODY_PAD_TOP= screen_rect.top / 2.f;
 
 	float win_w = (float)win.getSize().x;
 	float win_h = (float)win.getSize().y;
 	float cx    = win_w / 2.f;
 
-	// =================================================================
-	// 1. 机身：银白主色 + 深灰边 + 小圆角（不是大圆弧，真机长这样）
-	// =================================================================
 	sf::RectangleShape body(sf::Vector2f(win_w, win_h));
 	body.setPosition(0.f, 0.f);
-	body.setFillColor(sf::Color(238, 240, 245));   // 银白机身
+	body.setFillColor(sf::Color(238, 240, 245));
 	body.setOutlineColor(sf::Color(140, 142, 150));
 	body.setOutlineThickness(2.f);
 	win.draw(body);
@@ -112,9 +109,7 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 	drawCorner(0.f,   win_h);
 	drawCorner(win_w, win_h);
 
-	// =================================================================
-	// 2. 顶部：小品牌字（类似 NOKIA 在顶左） + 听筒（顶中偏右） + 前摄（右上）
-	// =================================================================
+	// —— 顶部品牌和听筒 ——
 	{
 		auto tex_brand = u16text_to_texture(u"MREmu", sf::Color(60, 60, 70));
 		sf::Sprite sp_brand(tex_brand);
@@ -122,94 +117,85 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 		win.draw(sp_brand);
 	}
 
-	sf::CircleShape ear(4.f, 28);
-	ear.setScale(2.8f, 0.5f);
+	sf::CircleShape ear(3.f, 28);
+	ear.setScale(2.5f, 0.5f);
 	ear.setFillColor(sf::Color(50, 50, 58));
 	ear.setOutlineColor(sf::Color(100, 100, 110));
-	ear.setOutlineThickness(0.6f);
-	ear.setPosition(cx - ear.getScale().x * 4.f + 18.f, BODY_PAD_TOP - 4.f * ear.getScale().y);
+	ear.setOutlineThickness(0.5f);
+	ear.setPosition(cx - ear.getScale().x * 3.f + 14.f, BODY_PAD_TOP - 3.f * ear.getScale().y);
 	win.draw(ear);
 
-	sf::CircleShape cam(1.8f, 14);
+	sf::CircleShape cam(1.5f, 14);
 	cam.setFillColor(sf::Color(30, 30, 40));
-	cam.setPosition(win_w - 22.f, BODY_PAD_TOP - 1.8f);
+	cam.setPosition(win_w - 20.f, BODY_PAD_TOP - 1.5f);
 	win.draw(cam);
 
-	// =================================================================
-	// 3. 屏幕：双层边框（外层亮银金属边 + 内层黑边），像真机屏幕凹进去
-	// =================================================================
-	sf::RectangleShape frame_outer(sf::Vector2f(screen_rect.width + 12.f, screen_rect.height + 12.f));
-	frame_outer.setPosition(screen_rect.left - 6.f, screen_rect.top - 6.f);
+	// —— 屏幕框 ——
+	sf::RectangleShape frame_outer(sf::Vector2f(screen_rect.width + 10.f, screen_rect.height + 10.f));
+	frame_outer.setPosition(screen_rect.left - 5.f, screen_rect.top - 5.f);
 	frame_outer.setFillColor(sf::Color(200, 204, 212));
 	frame_outer.setOutlineColor(sf::Color(120, 122, 130));
 	frame_outer.setOutlineThickness(1.f);
 	win.draw(frame_outer);
 
-	sf::RectangleShape frame_inner(sf::Vector2f(screen_rect.width + 4.f, screen_rect.height + 4.f));
-	frame_inner.setPosition(screen_rect.left - 2.f, screen_rect.top - 2.f);
+	sf::RectangleShape frame_inner(sf::Vector2f(screen_rect.width + 2.f, screen_rect.height + 2.f));
+	frame_inner.setPosition(screen_rect.left - 1.f, screen_rect.top - 1.f);
 	frame_inner.setFillColor(sf::Color::Black);
 	win.draw(frame_inner);
 
-	// =================================================================
-	// 4. 屏幕下方：一行软键标签文字（「选项」「功能表」「电话簿」）
-	// =================================================================
-	float soft_y = screen_rect.top + screen_rect.height + 10.f;
+	// —— 软键标签 ——
+	float soft_y = screen_rect.top + screen_rect.height + 8.f;
 	{
 		auto tex_l = u16text_to_texture(u"选项",   sf::Color(60, 60, 70));
 		auto tex_c = u16text_to_texture(u"功能表", sf::Color(60, 60, 70));
 		auto tex_r = u16text_to_texture(u"电话簿", sf::Color(60, 60, 70));
 		sf::Sprite sp_l(tex_l), sp_c(tex_c), sp_r(tex_r);
-		sp_l.setPosition(18.f,                            soft_y);
+		sp_l.setPosition(18.f, soft_y);
 		sp_r.setPosition(win_w - (float)tex_r.getSize().x - 14.f, soft_y);
-		sp_c.setPosition(cx - (float)tex_c.getSize().x / 2.f,    soft_y);
+		sp_c.setPosition(cx - (float)tex_c.getSize().x / 2.f, soft_y);
 		win.draw(sp_l);
 		win.draw(sp_c);
 		win.draw(sp_r);
 	}
 
-	// =================================================================
-	// 5. D-pad + OK 主按键（中央白色圆角方形 OK + 四向凸起块）
-	// =================================================================
-	float dpad_top = soft_y + 28.f;
-	const float OK_SIZE = 46.f;   // 中间 OK 方块大小
-	const float ARM_H   = 30.f;   // 上下/左右凸起条尺寸
+	// —— D-pad 区域 ——
+	float dpad_top = soft_y + 22.f;
+	const float OK_SIZE = 42.f;
+	const float ARM_H   = 26.f;
 
-	// —— 上下左右 4 个凸起条（浅灰，像按下去的方向键）
 	sf::Color arm = sf::Color(216, 220, 228);
 	sf::Color armLine = sf::Color(160, 162, 170);
 
-	sf::RectangleShape arm_up(sf::Vector2f(ARM_H, ARM_H * 0.55f));
+	sf::RectangleShape arm_up(sf::Vector2f(ARM_H, ARM_H * 0.5f));
 	arm_up.setFillColor(arm);
 	arm_up.setOutlineColor(armLine);
 	arm_up.setOutlineThickness(1.f);
 	arm_up.setPosition(cx - ARM_H / 2.f, dpad_top);
 	win.draw(arm_up);
 
-	sf::RectangleShape arm_dn(sf::Vector2f(ARM_H, ARM_H * 0.55f));
+	sf::RectangleShape arm_dn(sf::Vector2f(ARM_H, ARM_H * 0.5f));
 	arm_dn.setFillColor(arm);
 	arm_dn.setOutlineColor(armLine);
 	arm_dn.setOutlineThickness(1.f);
-	arm_dn.setPosition(cx - ARM_H / 2.f, dpad_top + OK_SIZE - ARM_H * 0.55f + 10.f);
+	arm_dn.setPosition(cx - ARM_H / 2.f, dpad_top + OK_SIZE - ARM_H * 0.5f + 6.f);
 	win.draw(arm_dn);
 
-	sf::RectangleShape arm_lf(sf::Vector2f(ARM_H * 0.55f, ARM_H));
+	sf::RectangleShape arm_lf(sf::Vector2f(ARM_H * 0.5f, ARM_H));
 	arm_lf.setFillColor(arm);
 	arm_lf.setOutlineColor(armLine);
 	arm_lf.setOutlineThickness(1.f);
-	arm_lf.setPosition(cx - OK_SIZE / 2.f - ARM_H * 0.55f + 2.f, dpad_top + (OK_SIZE - ARM_H) / 2.f + 5.f);
+	arm_lf.setPosition(cx - OK_SIZE / 2.f - ARM_H * 0.5f + 2.f, dpad_top + (OK_SIZE - ARM_H) / 2.f + 3.f);
 	win.draw(arm_lf);
 
-	sf::RectangleShape arm_rt(sf::Vector2f(ARM_H * 0.55f, ARM_H));
+	sf::RectangleShape arm_rt(sf::Vector2f(ARM_H * 0.5f, ARM_H));
 	arm_rt.setFillColor(arm);
 	arm_rt.setOutlineColor(armLine);
 	arm_rt.setOutlineThickness(1.f);
-	arm_rt.setPosition(cx + OK_SIZE / 2.f - 2.f, dpad_top + (OK_SIZE - ARM_H) / 2.f + 5.f);
+	arm_rt.setPosition(cx + OK_SIZE / 2.f - 2.f, dpad_top + (OK_SIZE - ARM_H) / 2.f + 3.f);
 	win.draw(arm_rt);
 
-	// —— 中央白色圆角方形 OK 键（最上层盖住四条凸起）
 	sf::RectangleShape ok_btn(sf::Vector2f(OK_SIZE, OK_SIZE));
-	// 画圆角方形：用 rect + 4 个小圆角覆盖四角
-	ok_btn.setPosition(cx - OK_SIZE / 2.f, dpad_top + (OK_SIZE - OK_SIZE) / 2.f + 5.f);
+	ok_btn.setPosition(cx - OK_SIZE / 2.f, dpad_top + 5.f);
 	ok_btn.setFillColor(sf::Color(248, 248, 252));
 	ok_btn.setOutlineColor(sf::Color(140, 142, 150));
 	ok_btn.setOutlineThickness(1.f);
@@ -218,8 +204,8 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 	float ok_x = ok_btn.getPosition().x;
 	float ok_y = ok_btn.getPosition().y;
 	{
-		float rc = 8.f;
-		sf::CircleShape cc(rc, 22);
+		float rc = 7.f;
+		sf::CircleShape cc(rc, 20);
 		cc.setFillColor(sf::Color(248, 248, 252));
 		cc.setOutlineColor(sf::Color(140, 142, 150));
 		cc.setOutlineThickness(1.f);
@@ -233,41 +219,36 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 		okC(ok_x + OK_SIZE,   ok_y + OK_SIZE);
 	}
 
-	// —— OK 文字
 	{
 		auto tex_ok = u16text_to_texture(u"OK", sf::Color(80, 80, 90));
 		sf::Sprite sp_ok(tex_ok);
-		sp_ok.setPosition(cx     - (float)tex_ok.getSize().x / 2.f,
-		                  ok_y   + OK_SIZE / 2.f - (float)tex_ok.getSize().y / 2.f);
+		sp_ok.setPosition(cx - (float)tex_ok.getSize().x / 2.f,
+		                  ok_y + OK_SIZE / 2.f - (float)tex_ok.getSize().y / 2.f);
 		win.draw(sp_ok);
 	}
 
-	// =================================================================
-	// 6. 通话（绿）/ 挂机（红）小方按钮，在 D-pad 左右两侧
-	// =================================================================
-	const float KB_SIZE = 22.f;
-	sf::RectangleShape call(sf::Vector2f(KB_SIZE + 4.f, KB_SIZE));
+	// —— 通话/挂机小按钮（缩小）——
+	const float KB_SIZE = 16.f;
+	sf::RectangleShape call(sf::Vector2f(KB_SIZE + 2.f, KB_SIZE));
 	call.setFillColor(sf::Color(80, 180, 90));
 	call.setOutlineColor(sf::Color(60, 140, 70));
-	call.setOutlineThickness(1.2f);
-	call.setPosition(16.f, dpad_top + (OK_SIZE - KB_SIZE) / 2.f + 5.f);
+	call.setOutlineThickness(1.f);
+	call.setPosition(18.f, dpad_top + (OK_SIZE - KB_SIZE) / 2.f + 3.f);
 	win.draw(call);
 
-	sf::RectangleShape end_b(sf::Vector2f(KB_SIZE + 4.f, KB_SIZE));
+	sf::RectangleShape end_b(sf::Vector2f(KB_SIZE + 2.f, KB_SIZE));
 	end_b.setFillColor(sf::Color(210, 70, 70));
 	end_b.setOutlineColor(sf::Color(170, 50, 50));
-	end_b.setOutlineThickness(1.2f);
-	end_b.setPosition(win_w - 16.f - KB_SIZE - 4.f, dpad_top + (OK_SIZE - KB_SIZE) / 2.f + 5.f);
+	end_b.setOutlineThickness(1.f);
+	end_b.setPosition(win_w - 18.f - KB_SIZE - 2.f, dpad_top + (OK_SIZE - KB_SIZE) / 2.f + 3.f);
 	win.draw(end_b);
 
-	// =================================================================
-	// 7. 底部：扬声器一排 5 小孔
-	// =================================================================
-	float hole_y = win_h - 14.f;
+	// —— 底部扬声器孔 ——
+	float hole_y = win_h - 10.f;
 	for (int i = 0; i < 5; ++i) {
-		sf::CircleShape hole(1.4f, 12);
+		sf::CircleShape hole(1.2f, 12);
 		hole.setFillColor(sf::Color(60, 60, 70));
-		hole.setPosition(cx - 30.f + i * 15.f, hole_y);
+		hole.setPosition(cx - 26.f + i * 13.f, hole_y);
 		win.draw(hole);
 	}
 }
@@ -281,10 +262,6 @@ int main(int argc, char** argv) {
 
 #ifndef ANDROID
 	// cmd 控制台日志：简化 pattern，一行一个 [时间] [级别] 内容
-	// 缺 API / warn / error 全在 cmd 里输出，不开额外 ImGui 日志面板
-	// 用 spdlog 公共 API 全局设置 pattern（自动作用到 default logger 的所有 sink），
-	// 避免直接访问 sinks 容器里 spdlog::sinks::sink 的内部成员 — 因为 common.h 里 sink 只有
-	// 前向声明，直接 s->set_pattern() 需要完整定义，会造成 C2027/C2039。
 	spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
 
 	cli::Parser parser(argc, argv);
@@ -329,11 +306,10 @@ int main(int argc, char** argv) {
 
 #ifndef ANDROID
 	// 国产直板功能机造型：窄长机身，窗口大小 ≈ 手机壳本身大小
-	// 布局：顶部 tiny 听筒 + 屏幕（占大头） + 中央功能行（通话 / OK 圆 / 挂机 + D-pad 装饰）+ 底部 4×3 数字键盘
-	// 背景颜色 = 机身颜色（用户看不到黑底，整个画面就是一台手机）
+	// 调整窗口尺寸：更紧凑
 	sf::RenderWindow win_device(sf::VideoMode(
-		std::max<unsigned>(360, (unsigned)(graphic.width * 1.5f + 36)),   // 240*1.5 + 左右壳 18*2 = 宽 396
-		std::max<unsigned>(780, (unsigned)(graphic.height * 2.f + 250))), // 320*2=640 屏 + 功能 80 + 数字 200 + 顶底 60 = 920 封顶
+		std::max<unsigned>(360, (unsigned)(graphic.width * 1.5f + 30)),
+		std::max<unsigned>(700, (unsigned)(graphic.height * 1.5f + 260))),
 		"MREmu");
 
 	// ImGui 绑定到 win_device（仅用来画数字键盘按钮 + VXP Error 弹窗）
@@ -392,17 +368,16 @@ int main(int argc, char** argv) {
 	keyboard.screen = &screen_sp;
 
 	auto update_screen_size = [&] {
-		// 屏幕按整数比缩放，但最大 clamp 到 1.5（240×320 ×1.5 = 360×480）—
-		// 屏幕不撑得巨大，手机整体保持窄直板。
+		// 屏幕按整数比缩放，但最大 clamp 到 1.5
 		int scale_x = win_device.getSize().x / graphic.width;
 		int scale_y = win_device.getSize().y / (graphic.height + graphic.height / 2);
 		scale = std::min(scale_x, scale_y);
 		if (scale < 1) scale = 1;
-		if (scale > 2) scale = 2;   // 最大值：240×320 ×2 = 480×640，再大按键会丑
+		if (scale > 2) scale = 2;
 
 		screen_sp.setScale((float)scale, (float)scale);
 		// 屏幕在手机中间稍微靠上（对应外壳的顶部小装饰）
-		const float target_top_pad = 36.f;
+		const float target_top_pad = 20.f;
 		float tx = (float)(win_device.getSize().x - graphic.width * scale) / 2.f;
 		float ty = std::max(target_top_pad, 20.f);
 		screen_sp.setPosition(tx, ty);
@@ -439,7 +414,7 @@ int main(int argc, char** argv) {
 #ifndef ANDROID
 		ImGui::SFML::Update(win_device, deltaClock.restart());
 
-		// VXP Error Modal（只在启动 vxp 不存在等极少情况弹一次，其他任何 debug 信息都走 cmd）
+		// VXP Error Modal
 		if (show_error) {
 			ImGui::OpenPopup("VXP Error");
 			show_error = false;
@@ -455,8 +430,8 @@ int main(int argc, char** argv) {
 
 		graphic.update_screen();
 
-		// ========== 设备窗口：手机外壳 + 屏幕 + 键盘（ImGui 画在同一个窗口上）==========
-		win_device.clear(sf::Color(178, 180, 188));  // 机身银灰色 = 背景色，窗口就是整个手机壳
+		// ========== 设备窗口：手机外壳 + 屏幕 + 键盘 ==========
+		win_device.clear(sf::Color(178, 180, 188));
 		sf::FloatRect screen_rect(screen_sp.getPosition().x,
 								  screen_sp.getPosition().y,
 								  screen_sp.getScale().x * graphic.width,

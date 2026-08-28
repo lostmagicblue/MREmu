@@ -71,22 +71,36 @@ namespace {
 
 		TtfGlyph glyph;
 		if (sf::Font* f = ttf_get()) {
-			sf::Glyph g = f->getGlyph((sf::Uint32)c, TTF_PX, false);
-			glyph.advance = (int)(g.advance + 0.5f);
-			if (g.texture) {
-				sf::Image img = g.texture->copyToImage();
-				glyph.w = (int)img.getSize().x;
-				glyph.h = (int)img.getSize().y;
-				glyph.off_x = (int)g.bounds.left;
-				glyph.off_y = TTF_BASELINE + (int)g.bounds.top;
-				glyph.alpha.resize(glyph.w * glyph.h);
-				const uint8_t* px = img.getPixelsPtr();
-				for (int i = 0; i < glyph.w * glyph.h; ++i)
-					glyph.alpha[i] = px[i * 4 + 3];
-				glyph.valid = true;
-			}
-			else if (glyph.advance > 0) {
-				glyph.valid = true;   // 空格这类无位图但有推进宽的字符
+			// 字体里没有这个字：valid 保持 false → 上层逐字回退点阵。
+			// 不能直接 getGlyph——缺字时它返回替换字形（空心方块），回退会失效。
+			if (f->hasGlyph((sf::Uint32)c)) {
+				sf::Glyph g = f->getGlyph((sf::Uint32)c, TTF_PX, false);
+				glyph.advance = (int)(g.advance + 0.5f);
+
+				// 版本无关取位图：sf::Glyph::texture 只有 SFML 2.6/3.x 才有，
+				// 统一用 font.getTexture(字号) 的字集图集 + textureRect 抠出本字形区域。
+				sf::IntRect tr = g.textureRect;
+				if (tr.width > 0 && tr.height > 0) {
+					sf::Image img = f->getTexture(TTF_PX).copyToImage();
+					int img_w = (int)img.getSize().x;
+
+					glyph.w = tr.width;
+					glyph.h = tr.height;
+					glyph.off_x = (int)g.bounds.left;
+					glyph.off_y = TTF_BASELINE + (int)g.bounds.top;
+					glyph.alpha.resize(glyph.w * glyph.h);
+
+					const uint8_t* base = img.getPixelsPtr();
+					for (int py = 0; py < tr.height; ++py)
+						for (int px = 0; px < tr.width; ++px)
+							glyph.alpha[py * tr.width + px] =
+								base[(((size_t)tr.top + py) * img_w + (tr.left + px)) * 4 + 3];
+
+					glyph.valid = true;
+				}
+				else if (glyph.advance > 0) {
+					glyph.valid = true;   // 空格这类无位图但有推进宽的字符
+				}
 			}
 		}
 		return g_ttf_cache.emplace((uint32_t)c, std::move(glyph)).first->second;

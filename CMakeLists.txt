@@ -28,7 +28,12 @@ if(MSVC)
   endforeach()
   # 保证 C++ 异常模型一致，避免 deps 之间默认值漂移
   add_compile_options(/EHsc)
+  # 压掉第三方 SDK/deps 的海量无害警告：C4099(class≠struct PDB名)
+  add_compile_options(/wd4099)
 endif()
+
+# 第三方 SDK/deps 里大量 strcpy/sprintf/sscanf/localtime，全局关掉 C4996 不安全 CRT 告警
+add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 
 # Enable optimizations by default
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)

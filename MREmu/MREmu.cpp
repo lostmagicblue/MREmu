@@ -193,11 +193,10 @@ int main(int argc, char** argv) {
 #ifndef ANDROID
 	// cmd 控制台日志：简化 pattern，一行一个 [时间] [级别] 内容
 	// 缺 API / warn / error 全在 cmd 里输出，不开额外 ImGui 日志面板
-	{
-		auto& sinks = spdlog::default_logger()->sinks();
-		for (auto& s : sinks)
-			s->set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
-	}
+	// 用 spdlog 公共 API 全局设置 pattern（自动作用到 default logger 的所有 sink），
+	// 避免直接访问 sinks 容器里 spdlog::sinks::sink 的内部成员 — 因为 common.h 里 sink 只有
+	// 前向声明，直接 s->set_pattern() 需要完整定义，会造成 C2027/C2039。
+	spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
 
 	cli::Parser parser(argc, argv);
 	{

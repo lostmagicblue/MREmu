@@ -31,10 +31,12 @@ if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET MREmu PROPERTY CXX_STANDARD 20)
 endif()
 
-# MSVC：禁用 SDK 头 vmsys.h 里的 GBK 非法字符告警（C4828 / C4819）。
-# vmsys.h 是外部提供的 mre_sdk，不是我们的源码，不能改它的字节编码，直接屏蔽警告即可。
+# MSVC：
+#   1) /wd4828 /wd4819：禁用 SDK 头 vmsys.h（GBK 编码）里的 codepage 非法字节告警。
+#   2) /wd4244 /wd4018：兜底屏蔽 int↔float、signed/unsigned 常见转换告警。
+#      （Keyboard.cpp 已经用显式 cast 逐一修掉；这里做二次保险，避免将来修改再引入同类告警。）
 if(MSVC)
-    target_compile_options(MREmu PRIVATE /wd4828 /wd4819)
+    target_compile_options(MREmu PRIVATE /wd4828 /wd4819 /wd4244 /wd4018)
 endif()
 
 target_link_libraries(MREmu sfml-graphics)

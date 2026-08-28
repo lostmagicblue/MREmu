@@ -372,38 +372,42 @@ void Keyboard::update_resize(int win_w, int win_h) {
 		frontend_layer_left.clear(sf::Color::Transparent);
 
 		sp_left = sf::Sprite(frontend_layer_left.getTexture());
-		sp_left.setPosition(left.left, left.top);
+		sp_left.setPosition((float)left.left, (float)left.top);
 
 		float kw = (float)(w - 1) / 3.f;
 		float kh = (float)(h - 1) / 4.f;
 
-		int font_scale = std::max<int>(kw / 16, 1);
+		int font_scale = std::max<int>((int)(kw / 16.f), 1);
 
 		std::vector<sf::Vertex> lines;
 
 		for (int ix = 0; ix < 4; ++ix) {
-			int x = ix * kw;
-			lines.push_back(sf::Vertex(sf::Vector2f(x + 1, 0)));
-			lines.push_back(sf::Vertex(sf::Vector2f(x + 1, h)));
+			float x = (float)ix * kw;
+			lines.push_back(sf::Vertex(sf::Vector2f(x + 1, 0.f)));
+			lines.push_back(sf::Vertex(sf::Vector2f(x + 1, (float)h)));
 		}
 
 		for (int iy = 0; iy < 5; ++iy) {
-			int y = iy * kh;
-			lines.push_back(sf::Vertex(sf::Vector2f(0, y)));
-			lines.push_back(sf::Vertex(sf::Vector2f(w, y)));
+			float y = (float)iy * kh;
+			lines.push_back(sf::Vertex(sf::Vector2f(0.f, y)));
+			lines.push_back(sf::Vertex(sf::Vector2f((float)w, y)));
 		}
 
 		for (int iy = 0; iy < 4; ++iy)
 			for (int ix = 0; ix < 3; ++ix) {
 				auto tex = u16text_to_texture(keys_marks_left[iy][ix], sf::Color::White);
 				sf::Sprite sp(tex);
-				sp.setOrigin(sp.getTextureRect().width / 2, sp.getTextureRect().height / 2);
-				sp.setPosition(ix * kw + kw / 2.f, iy * kh + kh / 2.f);
-				sp.setScale(font_scale, font_scale);
+				sp.setOrigin(
+					(float)(sp.getTextureRect().width  / 2),
+					(float)(sp.getTextureRect().height / 2));
+				sp.setPosition(
+					(float)ix * kw + kw / 2.f,
+					(float)iy * kh + kh / 2.f);
+				sp.setScale((float)font_scale, (float)font_scale);
 				frontend_layer_left.draw(sp);
 			}
 
-		for (int i = 0; i < lines.size(); ++i)
+		for (size_t i = 0; i < lines.size(); ++i)
 			lines[i].color = sf::Color::White;
 
 		frontend_layer_left.draw(lines.data(), lines.size(), sf::Lines);
@@ -417,19 +421,19 @@ void Keyboard::update_resize(int win_w, int win_h) {
 		frontend_layer_right.clear(sf::Color::Transparent);
 
 		sp_right = sf::Sprite(frontend_layer_right.getTexture());
-		sp_right.setPosition(right.left, right.top);
+		sp_right.setPosition((float)right.left, (float)right.top);
 
 		float kw = (float)(w - 1) / 3.f;
 		float kh = (float)(h - 1) / 4.f;
 
-		int font_scale = std::max<int>(kw / 16, 1);
+		int font_scale = std::max<int>((int)(kw / 16.f), 1);
 
 		std::vector<sf::Vertex> lines;
 
 		for (int iy = 0; iy < 3; ++iy)
 			for (int ix = 0; ix < 3; ++ix) {
-				float x = ix * kw + 1;
-				float y = iy * kh;
+				float x = (float)ix * kw + 1.f;
+				float y = (float)iy * kh;
 				if (!(std::abs(ix - 1) == 1 && std::abs(iy - 1)) == 1)
 					y += kh / 2.f;
 				else if (iy == 2)
@@ -449,13 +453,15 @@ void Keyboard::update_resize(int win_w, int win_h) {
 
 				auto tex = u16text_to_texture(keys_marks_right[iy][ix], sf::Color::White);
 				sf::Sprite sp(tex);
-				sp.setOrigin(sp.getTextureRect().width / 2, sp.getTextureRect().height / 2);
+				sp.setOrigin(
+					(float)(sp.getTextureRect().width  / 2),
+					(float)(sp.getTextureRect().height / 2));
 				sp.setPosition(x + kw / 2.f, y + kh / 2.f);
-				sp.setScale(font_scale, font_scale);
+				sp.setScale((float)font_scale, (float)font_scale);
 				frontend_layer_right.draw(sp);
 			}
 
-		for (int i = 0; i < lines.size(); ++i)
+		for (size_t i = 0; i < lines.size(); ++i)
 			lines[i].color = sf::Color::White;
 
 		frontend_layer_right.draw(lines.data(), lines.size(), sf::Lines);

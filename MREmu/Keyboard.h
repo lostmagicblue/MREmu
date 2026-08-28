@@ -22,7 +22,7 @@ constexpr float KEY_GAP       = 6.f;   // 键与键之间的间隙
 constexpr float BODY_GAP      = 6.f;   // 区块之间（屏幕→导航区→数字区）的间隙
 constexpr float NAV_KH        = 40.f;  // 导航键行高
 constexpr float NUM_KH        = 42.f;  // 数字键行高
-constexpr float SCR_SCALE     = 1.5f;  // 屏幕放大倍数（240×320 → 360×480）
+constexpr float SCR_SCALE     = 1.f;   // 屏幕原生 240×320 不放大（整体小巧，文字最清晰）
 constexpr int   GRID_NAV_ROWS = 3;     // 导航行数：LeftS ↑ RightS / ← OK → / 空 ↓ 空
 constexpr int   GRID_NUM_ROWS = 4;     // 数字行数：123 / 456 / 789 / *0#
 

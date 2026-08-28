@@ -16,7 +16,6 @@
 #include "Keyboard.h"
 #include "Touch.h"
 #include "Log.h"
-#include "UiLogSink.h"
 
 #include "MREngine/Graphic.h"
 #include "MREngine/IO.h"
@@ -184,114 +183,6 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 	}
 }
 
-// ================ ImGui 日志面板 ================
-static void draw_log_panel() {
-	static int filter_level = -1; // -1 = 全部，0=trace..6=critical
-	static bool only_missing_api = false;
-	static bool auto_scroll = true;
-	static char buf_search[256] = {0};
-
-	if (ImGui::Begin("Log 运行日志")) {
-		// 工具栏
-		ImGui::Text("按级别:");
-		ImGui::SameLine();
-		const char* levels[] = {"全部", "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRIT"};
-		for (int i = -1; i <= 5; ++i) {
-			if (i > -1) ImGui::SameLine();
-			if (i == -1) {
-				if (ImGui::Selectable("ALL", filter_level == -1)) filter_level = -1;
-			} else {
-				char btn[16];
-				snprintf(btn, sizeof(btn), "%s", levels[i + 1]);
-				ImVec4 color;
-				switch (i) {
-					case 0: color = ImVec4(0.55f,0.55f,0.55f,1.f); break; // trace 灰
-					case 1: color = ImVec4(0.40f,0.70f,1.00f,1.f); break; // debug 蓝
-					case 2: color = ImVec4(0.40f,1.00f,0.40f,1.f); break; // info 绿
-					case 3: color = ImVec4(1.00f,0.85f,0.25f,1.f); break; // warn 黄
-					case 4: color = ImVec4(1.00f,0.35f,0.35f,1.f); break; // err  红
-					case 5: color = ImVec4(1.00f,0.35f,0.85f,1.f); break; // crit 洋红
-					default: color = ImVec4(1,1,1,1);
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				if (ImGui::Selectable(btn, filter_level == i)) filter_level = i;
-				ImGui::PopStyleColor();
-			}
-		}
-		ImGui::SameLine(0, 20);
-		ImGui::Checkbox("只看缺API/warn/error", &only_missing_api);
-		ImGui::SameLine();
-		ImGui::Checkbox("自动滚动", &auto_scroll);
-		ImGui::SameLine();
-		ImGui::InputText("搜索", buf_search, sizeof(buf_search));
-		ImGui::SameLine();
-		if (ImGui::SmallButton("清空")) UiLogSink::clear();
-		ImGui::Separator();
-
-		auto entries = UiLogSink::snapshot();
-
-		ImGui::BeginChild("log_scroll", ImVec2(0, 0), false,
-			ImGuiWindowFlags_HorizontalScrollbar);
-
-		ImGuiListClipper clipper;
-		std::vector<int> filtered_idx;
-		filtered_idx.reserve(entries.size());
-		for (int i = 0; i < (int)entries.size(); ++i) {
-			auto& e = entries[i];
-			// 级别过滤
-			if (filter_level >= 0 && e.level != filter_level) continue;
-			// 只看缺API/warn/error: 匹配 vm_get_sym_entry 或者 level>=warn
-			if (only_missing_api) {
-				bool match = (e.level >= (int)spdlog::level::warn);
-				if (!match) {
-					if (e.msg.find("vm_get_sym_entry") != std::string::npos) match = true;
-				}
-				if (!match) continue;
-			}
-			// 关键字搜索
-			if (buf_search[0]) {
-				std::string hay = e.module + " " + e.msg;
-				if (hay.find(buf_search) == std::string::npos) continue;
-			}
-			filtered_idx.push_back(i);
-		}
-
-		clipper.Begin((int)filtered_idx.size());
-		while (clipper.Step()) {
-			for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
-				int idx = filtered_idx[row];
-				auto& e = entries[idx];
-				// 时间戳
-				uint32_t ms  = (uint32_t)(e.ts_ms % 1000);
-				uint32_t sec = (uint32_t)(e.ts_ms / 1000);
-				uint32_t m   = sec / 60, s = sec % 60;
-				// 级别前缀+颜色
-				ImVec4 color(1,1,1,1);
-				const char* lv = "T";
-				switch (e.level) {
-					case 0: color = ImVec4(0.55f,0.55f,0.55f,1.f); lv = "T"; break;
-					case 1: color = ImVec4(0.45f,0.75f,1.00f,1.f); lv = "D"; break;
-					case 2: color = ImVec4(0.45f,1.00f,0.45f,1.f); lv = "I"; break;
-					case 3: color = ImVec4(1.00f,0.85f,0.25f,1.f); lv = "W"; break;
-					case 4: color = ImVec4(1.00f,0.35f,0.35f,1.f); lv = "E"; break;
-					case 5: color = ImVec4(1.00f,0.35f,0.85f,1.f); lv = "C"; break;
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::Text("[%02d:%02d.%03d][%s][%s] %s",
-					m, s, ms, lv, e.module.c_str(), e.msg.c_str());
-				ImGui::PopStyleColor();
-			}
-		}
-		clipper.End();
-
-		if (auto_scroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
-			ImGui::SetScrollHereY(1.0f);
-
-		ImGui::EndChild();
-	}
-	ImGui::End();
-}
-
 int main(int argc, char** argv) {
     std::string app_path = "";
     bool path_is_local = false;
@@ -301,16 +192,12 @@ int main(int argc, char** argv) {
 
 #ifndef ANDROID
 	// cmd 控制台日志：简化 pattern，一行一个 [时间] [级别] 内容
-	// 用 sink->set_pattern() 字符串 API 即可，不依赖 pattern_formatter 头和内部命名空间
-	// 注：set_pattern 的 time_type 参数在部分老版本 spdlog 不存在，这里不传（默认 localtime）
+	// 缺 API / warn / error 全在 cmd 里输出，不开额外 ImGui 日志面板
 	{
 		auto& sinks = spdlog::default_logger()->sinks();
 		for (auto& s : sinks)
 			s->set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
 	}
-
-	// 安装 ImGui 环形日志 sink
-	UiLogSink::install();
 
 	cli::Parser parser(argc, argv);
 	{
@@ -353,16 +240,15 @@ int main(int argc, char** argv) {
 	MREngine::Graphic graphic;
 
 #ifndef ANDROID
-	// Debug 窗口：只放调试面板（内存、寄存器、图层、日志），不再显示 screen
-	sf::RenderWindow win_debug(sf::VideoMode(1100, 700), "MREmu Debug & Log");
-	// Device 窗口：带手机造型，足够放下 240x320 屏 + 键盘 (464x762 min)
+	// 单个手机造型窗口（足够放下 240x320 屏 + 键盘），不再开 Debug & Log 大窗口
+	// （日志输出全部走 cmd 控制台，简单直观）
 	sf::RenderWindow win_device(sf::VideoMode(
 		std::max<unsigned>(560, (unsigned)(graphic.width * 2 + 120)),
 		std::max<unsigned>(860, (unsigned)(graphic.height * 2 + 250))),
-		"MREmu Device");
+		"MREmu");
 
-	ImGui::SFML::Init(win_debug);
-	win_debug.setFramerateLimit(60);
+	// ImGui 绑定到 win_device（仅用来画数字键盘按钮 + VXP Error 弹窗）
+	ImGui::SFML::Init(win_device);
 	win_device.setFramerateLimit(60);
 #else
 	sf::RenderWindow win_device(sf::VideoMode::getDesktopMode(), "MREmu");
@@ -437,39 +323,21 @@ int main(int argc, char** argv) {
 	update_screen_size();
 
 	sf::Clock fps;
+	(void)fps;
 
 	sf::Clock deltaClock;
 	sf::Event event;
 
-	while (win_device.isOpen()
-#ifndef ANDROID
-        && win_debug.isOpen()
-#endif
-    ) {
-#ifndef ANDROID
-		while (win_debug.pollEvent(event)) {
-			ImGui::SFML::ProcessEvent(event);
-			switch (event.type) {
-			case sf::Event::Closed:
-				win_debug.close();
-				win_device.close();
-				break;
-			case sf::Event::Resized:
-				win_debug.setView(sf::View(sf::FloatRect(0.f, 0.f, (float)event.size.width, (float)event.size.height)));
-				break;
-			}
-		}
-#endif
-
+	while (win_device.isOpen()) {
 		while (win_device.pollEvent(event)) {
+#ifndef ANDROID
+			ImGui::SFML::ProcessEvent(event);
+#endif
 			keyboard.event(event);
 			touch.sf_event(event);
 			switch (event.type) {
 			case sf::Event::Closed:
 				win_device.close();
-#ifndef ANDROID
-				win_debug.close();
-#endif
 				break;
             case sf::Event::Resized:
                 win_device.setView(sf::View(sf::FloatRect(0.f, 0.f, (float)event.size.width, (float)event.size.height)));
@@ -477,12 +345,14 @@ int main(int argc, char** argv) {
                 break;
 			}
 		}
-#ifndef ANDROID
-		ImGui::SFML::Update(win_debug, deltaClock.restart());
 
+#ifndef ANDROID
+		ImGui::SFML::Update(win_device, deltaClock.restart());
+
+		// VXP Error Modal（只在启动 vxp 不存在等极少情况弹一次，其他任何 debug 信息都走 cmd）
 		if (show_error) {
 			ImGui::OpenPopup("VXP Error");
-			show_error = false; // Only call OpenPopup once
+			show_error = false;
 		}
 		if (ImGui::BeginPopupModal("VXP Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("%s", error_message.c_str());
@@ -495,53 +365,7 @@ int main(int argc, char** argv) {
 
 		graphic.update_screen();
 
-#ifndef ANDROID
-		// ========== Debug 窗口：左 Screen/图层/Canvas，右内存/FPS，底部日志整页 ==========
-		if (ImGui::Begin("Screen 屏幕", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-			graphic.imgui_screen();
-		}
-		ImGui::End();
-
-		App* active_app = appManager.get_active_app();
-		if (active_app) {
-			if (ImGui::Begin("Layers 图层")) {
-				active_app->graphic.imgui_layers();
-			}
-			ImGui::End();
-			if (ImGui::Begin("Canvases")) {
-				active_app->graphic.imgui_canvases();
-			}
-			ImGui::End();
-		}
-
-		if (ImGui::Begin("Memory 内存", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-			float size = 0.f, free_size = 0.f;
-			if (active_app) {
-				size = active_app->app_memory.get_memory_size();
-				free_size = active_app->app_memory.get_free_memory_size();
-			}
-			float used_size = size - free_size;
-			ImGui::Text("All:   %1.1f KB  (%1.3f MB)",  size / 1024.f, size / 1024.f / 1024.f);
-			ImGui::Text("Used:  %1.1f KB  (%1.3f MB)  %1.1f%%",
-				used_size / 1024.f, used_size / 1024.f / 1024.f,
-				size > 0 ? 100.f * used_size / size : 0.f);
-			ImGui::Text("Free:  %1.1f KB  (%1.3f MB)", free_size / 1024.f, free_size / 1024.f / 1024.f);
-			ImGui::Text("FPS:   %1.1f", 1.f / fps.restart().asSeconds());
-		}
-		ImGui::End();
-
-		if (ImGui::Begin("Regs 寄存器", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-			Cpu::imgui_REG();
-		}
-		ImGui::End();
-
-		// 键盘 debug + 主日志面板（占满余下空间）
-		keyboard.imgui_keyboard();
-
-		draw_log_panel();
-#endif
-
-		// ========== Device 窗口：画手机外壳 + 屏幕 sprite + 键盘 ==========
+		// ========== 设备窗口：手机外壳 + 屏幕 + 键盘（ImGui 画在同一个窗口上）==========
 		win_device.clear(sf::Color(18, 18, 22));
 		sf::FloatRect screen_rect(screen_sp.getPosition().x,
 								  screen_sp.getPosition().y,
@@ -556,12 +380,9 @@ int main(int argc, char** argv) {
 		}
 #ifndef ANDROID
 		keyboard.draw(&win_device);
-#endif
 
-#ifndef ANDROID
-		ImGui::SFML::Render(win_debug);
-		win_debug.display();
-		win_debug.clear(sf::Color(23, 23, 28));
+		// ImGui 内容：仅 keyboard.draw() 内部用到的按钮 + 上面的 VXP Error 弹窗
+		ImGui::SFML::Render(win_device);
 #endif
 
 		win_device.display();

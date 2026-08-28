@@ -23,7 +23,15 @@ namespace NativeApps::Menu::AppSelector {
 	int touch_time = 0;
 	
 
-	VMUINT16 gray = VM_COLOR_888_TO_565(50, 50, 50);
+	// 青春风配色（RGB565）：浅蓝白渐变底 + 白色卡片行 + 选中高亮
+	const VMUINT16 COL_BG_TOP   = VM_COLOR_888_TO_565(235, 246, 255);   // 背景渐变顶（近白淡蓝）
+	const VMUINT16 COL_BG_BOT   = VM_COLOR_888_TO_565(206, 233, 253);   // 背景渐变底（淡蓝）
+	const VMUINT16 COL_CARD     = VM_COLOR_888_TO_565(255, 255, 255);   // 普通行：白色卡片
+	const VMUINT16 COL_CARD_SEL = VM_COLOR_888_TO_565(178, 218, 255);   // 选中行：淡蓝高亮
+	const VMUINT16 COL_LINE     = VM_COLOR_888_TO_565(196, 208, 222);   // 卡片描边（浅灰蓝）
+	const VMUINT16 COL_ACCENT   = VM_COLOR_888_TO_565(56, 132, 246);    // 选中行左侧竖条（亮蓝）
+	const VMUINT16 COL_TEXT     = VM_COLOR_888_TO_565(55, 62, 75);      // 文字：深灰蓝
+	const VMUINT16 COL_TEXT_SEL = VM_COLOR_888_TO_565(25, 70, 150);     // 选中文字：亮蓝
 
 	int m_i = 0;
 
@@ -96,24 +104,45 @@ namespace NativeApps::Menu::AppSelector {
 	}
 
 	void draw() {
-		vm_graphic_fill_rect(layer_buf, 0, 0, w, h, 0x0000, 0x0000);
+		// 背景：浅蓝白竖向渐变（一行一行铺出来，青春感，替代原来的黑底）
+		for (int ly = 0; ly < h; ++ly) {
+			int r = 235 + (206 - 235) * ly / (h - 1);
+			int g = 246 + (233 - 246) * ly / (h - 1);
+			int b = 255 + (253 - 255) * ly / (h - 1);
+			VMUINT16 c = VM_COLOR_888_TO_565(r, g, b);
+			vm_graphic_fill_rect(layer_buf, 0, ly, w, 1, c, c);
+		}
 
 		for (int i = 0; i < vxps.size(); ++i) {
 			int y = b_h * i - scroll_pos;
 
-			if (i == m_i)
-				vm_graphic_fill_rect(layer_buf, 0, y, w, b_h, gray, gray);
+			bool sel = (i == m_i);
+
+			// 行卡片：和背景留 3px 缝隙（x=3 / y+2 / 高 b_h-4），白色；选中 = 淡蓝
+			vm_graphic_fill_rect(layer_buf, 3, y + 2, w - 6, b_h - 4,
+				sel ? COL_CARD_SEL : COL_CARD, sel ? COL_CARD_SEL : COL_CARD);
+
+			// 卡片浅色描边（上下左右 1px，代替原来贯穿整屏的白色分隔线）
+			vm_graphic_line(layer_buf, 3,     y + 2,     w - 4, y + 2,     COL_LINE);
+			vm_graphic_line(layer_buf, 3,     y + b_h - 3, w - 4, y + b_h - 3, COL_LINE);
+			vm_graphic_line(layer_buf, 3,     y + 2,     3,     y + b_h - 3, COL_LINE);
+			vm_graphic_line(layer_buf, w - 4, y + 2,     w - 4, y + b_h - 3, COL_LINE);
+
+			if (sel) {
+				// 选中行左侧 3px 亮蓝竖条
+				vm_graphic_fill_rect(layer_buf, 3, y + 2, 3, b_h - 4, COL_ACCENT, COL_ACCENT);
+			}
 
 			if (vxps[i].img)
-				vm_graphic_blt(layer_buf, 1, y, (VMBYTE*)vxps[i].img, 0, 0, img_wh, img_wh, 1);
+				vm_graphic_blt(layer_buf, 6, y + 3, (VMBYTE*)vxps[i].img, 0, 0, img_wh, img_wh, 1);
 
-			vm_graphic_textout(layer_buf, 2 + b_h, y + (b_h - c_h) / 2, (VMWSTR)vxps[i].name.c_str(), 100, 0xFFFF);
-
-			vm_graphic_line(layer_buf, 0, y + b_h - 1, w, y + b_h - 1, 0xFFFF);
+			vm_graphic_textout(layer_buf, 8 + b_h, y + (b_h - c_h) / 2,
+				(VMWSTR)vxps[i].name.c_str(), 100, sel ? COL_TEXT_SEL : COL_TEXT);
 		}
 
 		if (!vxps.size())
-			vm_graphic_textout(layer_buf, 0, 0, vm_ucs2_string((VMSTR)"No files in mre folder"), 100, 0xFFFF);
+			vm_graphic_textout(layer_buf, 8, h / 2 - c_h / 2,
+				vm_ucs2_string((VMSTR)"No files in mre folder"), 100, COL_TEXT);
 
 		vm_graphic_flush_layer(&layer_h, 1);
 	}

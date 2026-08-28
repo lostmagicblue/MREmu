@@ -75,40 +75,35 @@ void mre_main(AppManager* appManager_p) {
 // ================ 手机外壳绘制（win_device 背景）================
 // 画一个圆角矩形 + 听筒 + 屏幕框（屏幕在里面，sprite 我们按 screen_sp 的位置自己放）
 static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_rect) {
-	// 真机直板造型：窄边，窄高比，不做任何"巨大装饰"
-	// 屏幕左右边距 24px、上边距 36px（顶 tiny 装饰）、下边距 150px（留给通话键 + D-pad 装饰 + 数字键盘）
-	const float body_pad_x   = 24.f;
-	const float body_pad_top = 36.f;
-	const float body_pad_bot = 150.f;
+	// 国产直板功能机：机身就是整个窗口，背景色已经是机身银灰（外面 win.clear() 保证没黑底）。
+	// 这里只负责画：深灰边线 + 四角圆角遮盖 + 屏幕黑框 + 顶部听筒/前摄 + 屏幕下方功能行装饰 + 底部扬声器小孔。
+	float win_w = (float)win.getSize().x;
+	float win_h = (float)win.getSize().y;
 
-	float body_x = screen_rect.left - body_pad_x;
-	float body_y = screen_rect.top  - body_pad_top;
-	float body_w = screen_rect.width  + body_pad_x * 2.f;
-	float body_h = screen_rect.height + body_pad_top + body_pad_bot;
+	const float r = 26.f;   // 四角圆角半径
 
-	// ====== 1. 机身主体（银灰金属色，像第二张真机） ======
-	const float r = 22.f;
-	sf::RectangleShape body(sf::Vector2f(body_w, body_h));
-	body.setPosition(body_x, body_y);
-	body.setFillColor(sf::Color(178, 180, 188));     // 银灰机身
-	body.setOutlineColor(sf::Color(110, 112, 120));   // 深灰边线
+	// ===== 1. 机身边线（让用户看见手机轮廓，虽然背景色就是机身色） =====
+	sf::RectangleShape body(sf::Vector2f(win_w, win_h));
+	body.setPosition(0.f, 0.f);
+	body.setFillColor(sf::Color(178, 180, 188));
+	body.setOutlineColor(sf::Color(110, 112, 120));
 	body.setOutlineThickness(2.f);
 	win.draw(body);
-	// 四角做圆角遮盖
+
 	auto drawCorner = [&](float cx, float cy) {
-		sf::CircleShape c(r, 28);
+		sf::CircleShape c(r, 30);
 		c.setFillColor(sf::Color(178, 180, 188));
 		c.setOutlineColor(sf::Color(110, 112, 120));
 		c.setOutlineThickness(2.f);
 		c.setPosition(cx - r, cy - r);
 		win.draw(c);
 	};
-	drawCorner(body_x,          body_y);
-	drawCorner(body_x + body_w, body_y);
-	drawCorner(body_x,          body_y + body_h);
-	drawCorner(body_x + body_w, body_y + body_h);
+	drawCorner(0.f,    0.f   );
+	drawCorner(win_w,  0.f   );
+	drawCorner(0.f,    win_h );
+	drawCorner(win_w,  win_h );
 
-	// ====== 2. 屏幕黑框（就真的一块屏，黑边很细） ======
+	// ===== 2. 屏幕黑框（1px 深灰边） =====
 	sf::RectangleShape screen_frame(sf::Vector2f(screen_rect.width + 4.f, screen_rect.height + 4.f));
 	screen_frame.setPosition(screen_rect.left - 2.f, screen_rect.top - 2.f);
 	screen_frame.setFillColor(sf::Color::Black);
@@ -116,62 +111,89 @@ static void draw_phone_frame(sf::RenderWindow& win, const sf::FloatRect& screen_
 	screen_frame.setOutlineThickness(1.f);
 	win.draw(screen_frame);
 
-	// ====== 3. 顶部：细长听筒槽 + 微型前摄（去掉大"品牌字"，真机很简洁） ======
-	sf::CircleShape ear(5.f, 32);
-	ear.setScale(3.4f, 0.6f);                       // 扁长听筒
+	// ===== 3. 顶部：细长听筒槽 + 微型前摄（金立长虹那种非常简洁的顶） =====
+	sf::CircleShape ear(4.5f, 30);
+	ear.setScale(3.2f, 0.55f);
 	ear.setFillColor(sf::Color(40, 40, 48));
 	ear.setOutlineColor(sf::Color(90, 90, 100));
 	ear.setOutlineThickness(0.8f);
 	ear.setPosition(
-		body_x + body_w / 2.f - ear.getScale().x * 5.f,
-		body_y + body_pad_top / 2.f - ear.getScale().y * 5.f);
+		win_w / 2.f - ear.getScale().x * 4.5f,
+		screen_rect.top / 2.f - ear.getScale().y * 4.5f);
 	win.draw(ear);
 
-	sf::CircleShape cam(2.8f, 20);                    // tiny 前摄
+	sf::CircleShape cam(2.4f, 18);
 	cam.setFillColor(sf::Color(30, 30, 40));
 	cam.setOutlineColor(sf::Color(100, 100, 110));
-	cam.setOutlineThickness(0.8f);
-	cam.setPosition(body_x + body_w - 42.f, body_y + body_pad_top / 2.f - 2.8f);
+	cam.setOutlineThickness(0.6f);
+	cam.setPosition(win_w - 28.f, screen_rect.top / 2.f - 2.4f);
 	win.draw(cam);
 
-	// ====== 4. 屏幕下方：[左通话绿键] + [中央 OK 圆] + [右挂机红键] 装饰小行 ======
-	float nav_y = screen_rect.top + screen_rect.height + 22.f;
-	// 中央 OK 圆
-	sf::CircleShape ok_circle(14.f, 40);
-	ok_circle.setFillColor(sf::Color(230, 230, 235));
-	ok_circle.setOutlineColor(sf::Color(90, 90, 100));
-	ok_circle.setOutlineThickness(1.4f);
-	ok_circle.setPosition(body_x + body_w / 2.f - 14.f, nav_y);
-	win.draw(ok_circle);
-	sf::Text ok_txt;
-	ok_txt.setString("OK");
-	ok_txt.setFillColor(sf::Color(60, 60, 65));
-	ok_txt.setCharacterSize(11);
-	ok_txt.setPosition(body_x + body_w / 2.f - 10.f, nav_y + 8.f);
-	win.draw(ok_txt);
+	// ===== 4. 屏幕下方「国产功能键区」装饰（和 Keyboard RIGHT 的 D-pad 位置对齐；装饰和功能键两套都在这一整块区域）
+	// 只画软键 + 通话绿 + OK 圆盘（内嵌 D-pad 四向三角）+ 挂机红
+	float nav_top = screen_rect.top + screen_rect.height + 14.f;
+	float cx      = win_w / 2.f;
 
-	// 左软键 + 绿色通话键
-	sf::CircleShape call(9.f, 28);
+	// 左软键 + 通话键（绿）
+	sf::CircleShape call(8.5f, 24);
 	call.setFillColor(sf::Color(60, 170, 80));
 	call.setOutlineColor(sf::Color(40, 130, 60));
 	call.setOutlineThickness(1.2f);
-	call.setPosition(body_x + 38.f, nav_y + 5.f);
+	call.setPosition(22.f, nav_top + 14.f);
 	win.draw(call);
 
-	// 右软键 + 红色挂机键
-	sf::CircleShape end(9.f, 28);
+	// 右软键 + 挂机键（红）
+	sf::CircleShape end(8.5f, 24);
 	end.setFillColor(sf::Color(200, 60, 60));
 	end.setOutlineColor(sf::Color(160, 40, 40));
 	end.setOutlineThickness(1.2f);
-	end.setPosition(body_x + body_w - 38.f - 18.f, nav_y + 5.f);
+	end.setPosition(win_w - 22.f - 17.f, nav_top + 14.f);
 	win.draw(end);
 
-	// ====== 5. 底部：3 个小圆扬声器孔，很小一排 ======
-	float hole_y = body_y + body_h - 18.f;
-	for (int i = 0; i < 3; ++i) {
-		sf::CircleShape hole(1.8f, 14);
+	// 中央 OK 圆盘（外面金属银大圈 + 内白圆 + 4 个方向三角 = 国产机经典 D-pad 造型）
+	sf::CircleShape ok_ring(24.f, 48);
+	ok_ring.setFillColor(sf::Color(200, 200, 208));
+	ok_ring.setOutlineColor(sf::Color(90, 90, 100));
+	ok_ring.setOutlineThickness(1.5f);
+	ok_ring.setPosition(cx - 24.f, nav_top);
+	win.draw(ok_ring);
+
+	sf::CircleShape ok_inner(14.f, 36);
+	ok_inner.setFillColor(sf::Color(230, 230, 238));
+	ok_inner.setOutlineColor(sf::Color(130, 130, 140));
+	ok_inner.setOutlineThickness(1.f);
+	ok_inner.setPosition(cx - 14.f, nav_top + 10.f);
+	win.draw(ok_inner);
+	sf::Text okt;
+	okt.setString("OK");
+	okt.setFillColor(sf::Color(60, 60, 65));
+	okt.setCharacterSize(10);
+	okt.setPosition(cx - 9.f, nav_top + 16.f);
+	win.draw(okt);
+
+	// D-pad 四个方向小三角（点缀装饰，提示位置）
+	auto tri = [&](float px, float py, float rotDeg, sf::Color c) {
+		sf::ConvexShape t(3);
+		t.setPoint(0, sf::Vector2f( 0.f, -5.f));
+		t.setPoint(1, sf::Vector2f( 5.f,  4.f));
+		t.setPoint(2, sf::Vector2f(-5.f,  4.f));
+		t.setFillColor(c);
+		t.setPosition(px, py);
+		t.setRotation(rotDeg);
+		win.draw(t);
+	};
+	sf::Color dk = sf::Color(110, 112, 120);
+	tri(cx,         nav_top +  6.f, 0.f,   dk);  // ↑
+	tri(cx + 22.f,  nav_top + 28.f, 90.f,  dk);  // →
+	tri(cx,         nav_top + 50.f, 180.f, dk);  // ↓
+	tri(cx - 22.f,  nav_top + 28.f, 270.f, dk);  // ←
+
+	// ===== 5. 底部：扬声器 5 个小圆孔一排 =====
+	float hole_y = win_h - 16.f;
+	for (int i = 0; i < 5; ++i) {
+		sf::CircleShape hole(1.6f, 14);
 		hole.setFillColor(sf::Color(40, 40, 48));
-		hole.setPosition(body_x + body_w / 2.f - 20.f + i * 18.f, hole_y);
+		hole.setPosition(cx - 32.f + i * 16.f, hole_y);
 		win.draw(hole);
 	}
 }
@@ -232,11 +254,12 @@ int main(int argc, char** argv) {
 	MREngine::Graphic graphic;
 
 #ifndef ANDROID
-	// 单个手机造型窗口（窄长直板，小而紧凑，不再 560×860 那么巨大）
-	// 日志输出全部走 cmd 控制台，简单直观
+	// 国产直板功能机造型：窄长机身，窗口大小 ≈ 手机壳本身大小
+	// 布局：顶部 tiny 听筒 + 屏幕（占大头） + 中央功能行（通话 / OK 圆 / 挂机 + D-pad 装饰）+ 底部 4×3 数字键盘
+	// 背景颜色 = 机身颜色（用户看不到黑底，整个画面就是一台手机）
 	sf::RenderWindow win_device(sf::VideoMode(
-		std::max<unsigned>(420, (unsigned)(graphic.width * 2 + 48)),
-		std::max<unsigned>(820, (unsigned)(graphic.height * 2 + 200))),
+		std::max<unsigned>(360, (unsigned)(graphic.width * 1.5f + 36)),   // 240*1.5 + 左右壳 18*2 = 宽 396
+		std::max<unsigned>(780, (unsigned)(graphic.height * 2.f + 250))), // 320*2=640 屏 + 功能 80 + 数字 200 + 顶底 60 = 920 封顶
 		"MREmu");
 
 	// ImGui 绑定到 win_device（仅用来画数字键盘按钮 + VXP Error 弹窗）
@@ -359,7 +382,7 @@ int main(int argc, char** argv) {
 		graphic.update_screen();
 
 		// ========== 设备窗口：手机外壳 + 屏幕 + 键盘（ImGui 画在同一个窗口上）==========
-		win_device.clear(sf::Color(18, 18, 22));
+		win_device.clear(sf::Color(178, 180, 188));  // 机身银灰色 = 背景色，窗口就是整个手机壳
 		sf::FloatRect screen_rect(screen_sp.getPosition().x,
 								  screen_sp.getPosition().y,
 								  screen_sp.getScale().x * graphic.width,

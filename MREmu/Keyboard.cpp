@@ -357,27 +357,35 @@ void Keyboard::update_resize(int win_w, int win_h) {
 	int screen_w = (int)(screen->getScale().x * screen->getTextureRect().width);
 	int screen_h = (int)(screen->getScale().y * screen->getTextureRect().height);
 
+	// ===== 国产直板功能机：D-pad(3×4 上方) + 数字(3×4 下方) 上下竖排，共用同一 3 列窄宽 =====
+	// 完全不再左右并排，整台手机是窄长条形。
 	sf::IntRect left, right;
-	// 强制走「屏幕下方横排」：手机直板造型，数字键 + D-pad 永远在屏幕下边，
-	// 不再出现「方向键在屏幕右侧」的巨宽布局。
-	// ratio = 宽 / 高 = 3 / 4 → 每个键区都是窄高的格子。
 	{
-		auto size = size_by_aspect_ratio(win_w, win_h - screen_h, 3.f / 4.f);
-		int x = (win_w - size.x) / 2, y = screen_y + screen_h + 10; // +10 padding，和外壳的通话/OK装饰错开
-		left  = { x,             y, size.x / 2 + 1, size.y };
-		right = { x + size.x / 2, y, size.x / 2,     size.y };
+		// 键盘整体在屏幕下方，距离屏幕底部留 14px（刚好容纳外壳画的通话/OK/挂机装饰层）
+		int kb_top   = screen_y + screen_h + 14;
+		int kb_left  = (win_w - screen_w) / 2;          // 键盘和屏幕同宽对齐（屏幕左右边距=数字键左右边距，直板感）
+		int kb_w     = screen_w;
+		int kb_h     = std::max(1, win_h - kb_top - 20); // 底部留 20px 扬声器空位
+		int kb_right = kb_left + kb_w;
+		(void)kb_right;
+
+		// 上下两块：RIGHT（D-pad）3×4 在上，LEFT（数字）3×4 在下
+		int half_h = kb_h / 2;
+		right = { kb_left, kb_top,          kb_w, half_h };
+		left  = { kb_left, kb_top + half_h, kb_w, kb_h - half_h };
 	}
 
-	// —— 控制键格尺寸：手机按键不能巨大。最大单格 宽 110 / 高 46（紧凑好看）。
-	const float MAX_KW = 110.f;
-	const float MAX_KH = 46.f;
+	// —— 键格尺寸上限（国产机键盘不能巨大）
+	const float MAX_KW   = 92.f;
+	const float MAX_KH_L = 48.f;
+	const float MAX_KH_R = 44.f;
 
 
 	{
 		int w = left.width, h = left.height;
 
-		float kw = std::min(MAX_KW, (float)(w - 1) / 3.f);
-		float kh = std::min(MAX_KH, (float)(h - 1) / 4.f);
+		float kw = std::min(MAX_KW,   (float)(w - 1) / 3.f);
+		float kh = std::min(MAX_KH_L, (float)(h - 1) / 4.f);
 		int draw_w = (int)(kw * 3.f + 1.f);
 		int draw_h = (int)(kh * 4.f + 1.f);
 		int off_x  = (w - draw_w) / 2;
@@ -436,11 +444,8 @@ void Keyboard::update_resize(int win_w, int win_h) {
 	{
 		int w = right.width, h = right.height;
 
-		// D-pad 网格（3 列 × 4 行，但视觉上是 ↑/←OK→/↓/-/删除 这种方向排布）
-		// 高度稍矮一点（36 单格上限更紧凑），宽度和数字一致
-		const float MAX_KW_R = 105.f;
-		const float MAX_KH_R = 40.f;
-		float kw = std::min(MAX_KW_R, (float)(w - 1) / 3.f);
+		// D-pad 网格（3 列 × 4 行）和 LEFT 数字共用 3 列宽，上下竖排更紧凑
+		float kw = std::min(MAX_KW,   (float)(w - 1) / 3.f);
 		float kh = std::min(MAX_KH_R, (float)(h - 1) / 4.f);
 		int draw_w = (int)(kw * 3.f + 1.f);
 		int draw_h = (int)(kh * 4.f + 1.f);

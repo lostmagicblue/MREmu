@@ -78,3 +78,8 @@ void UiLogSink::log(const spdlog::details::log_msg& msg) {
 
 // 环形缓存不需要 flush，空实现即可
 void UiLogSink::flush() {}
+
+// 环形缓存不做格式化（我们直接拆 payload），这两个函数空实现就行，
+// 只是为了填 spdlog::sinks::sink 里的纯虚函数。
+void UiLogSink::set_pattern(const std::string& /*pattern*/) {}
+void UiLogSink::set_formatter(std::unique_ptr<spdlog::formatter> /*sink_formatter*/) {}

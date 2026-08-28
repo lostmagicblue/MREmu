@@ -9,11 +9,13 @@
 //       保证从 0.x 到 1.x 的任意 spdlog 版本都能顺利编译链接。
 
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <spdlog/sinks/sink.h>
+#include <spdlog/formatter.h>
 
 struct UiLogEntry {
     uint64_t ts_ms = 0;        // ms since app start
@@ -38,6 +40,8 @@ public:
     // —— spdlog::sinks::sink 接口 ——
     void log(const spdlog::details::log_msg& msg) override;
     void flush() override;
+    void set_pattern(const std::string& pattern) override;
+    void set_formatter(std::unique_ptr<spdlog::formatter> sink_formatter) override;
 
 private:
     static std::mutex&             mtx();

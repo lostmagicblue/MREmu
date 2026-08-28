@@ -41,10 +41,11 @@ if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET MREmu PROPERTY CXX_STANDARD 20)
 endif()
 
-# MSVC：强制 /utf-8 源码/执行字符集。
-# （mre_sdk 里的 vmsys.h 含一些 GBK 字符，没这个就 C4828，未来还可能 C4819 甚至编不过。）
+# MSVC：禁用 SDK 头 vmsys.h 里的 GBK 非法字符告警（C4828 / C4819）。
+# vmsys.h 是外部提供的 mre_sdk，不是我们的源码，不能改它的字节编码，
+# 也不需要 /utf-8（/utf-8 反而会强制按 UTF-8 读它，问题更大），直接屏蔽警告即可。
 if(MSVC)
-    target_compile_options(MREmu PRIVATE /utf-8)
+    target_compile_options(MREmu PRIVATE /wd4828 /wd4819)
 endif()
 
 target_link_libraries(MREmu sfml-graphics)

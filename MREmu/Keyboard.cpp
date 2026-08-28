@@ -231,14 +231,18 @@ void Keyboard::draw_press_key(sf::RenderTarget* rt, int key) {
 
 
 	if (x != -1) {
-		offset_vec = sp_left.getPosition();
-		kw = (float)sp_left.getTextureRect().width / 3.f;
-		kh = (float)sp_left.getTextureRect().height / 4.f;
+		offset_vec = sf::Vector2f(
+			sp_left.getPosition().x + (float)layout_left.off_x,
+			sp_left.getPosition().y + (float)layout_left.off_y);
+		kw = layout_left.kw;
+		kh = layout_left.kh;
 	}
 	else {
-		offset_vec = sp_right.getPosition();
-		kw = (float)sp_right.getTextureRect().width / 3.f;
-		kh = (float)sp_right.getTextureRect().height / 4.f;
+		offset_vec = sf::Vector2f(
+			sp_right.getPosition().x + (float)layout_right.off_x,
+			sp_right.getPosition().y + (float)layout_right.off_y);
+		kw = layout_right.kw;
+		kh = layout_right.kh;
 
 		for (int i = 0; i < 3; ++i)
 			for (int j = 0; j < 3; ++j)
@@ -280,41 +284,43 @@ static bool in_box(int x, int y, sf::Sprite sp) {
 
 int Keyboard::find_key_by_pos(int px, int py) {
 	if (in_box(px, py, sp_left)) {
-		int x = sp_left.getPosition().x;
-		int y = sp_left.getPosition().y;
-		int w = sp_left.getTextureRect().width;
-		int h = sp_left.getTextureRect().height;
+		int x = (int)sp_left.getPosition().x + layout_left.off_x;
+		int y = (int)sp_left.getPosition().y + layout_left.off_y;
 
-		float kw = (float)w / 3;
-		float kh = (float)h / 4;
+		float kw = layout_left.kw;
+		float kh = layout_left.kh;
 
-		int kpx = (px - x) / kw, kpy = (py - y) / kh;
+		int kpx = (int)((float)(px - x) / kw);
+		int kpy = (int)((float)(py - y) / kh);
+		if (kpx < 0 || kpx >= layout_left.cols) return MREMU_KEY_NONE;
+		if (kpy < 0 || kpy >= layout_left.rows) return MREMU_KEY_NONE;
 
 		return key_map_left[kpy][kpx];
 	}
 	if (in_box(px, py, sp_right)) {
-		int x = sp_right.getPosition().x;
-		int y = sp_right.getPosition().y;
-		int w = sp_right.getTextureRect().width;
-		int h = sp_right.getTextureRect().height;
+		int x = (int)sp_right.getPosition().x + layout_right.off_x;
+		int y = (int)sp_right.getPosition().y + layout_right.off_y;
 
-		float kw = (float)w / 3;
-		float kh = (float)h / 4;
+		float kw = layout_right.kw;
+		float kh = layout_right.kh;
 
-		int kpx = (px - x) / kw, kpy = (py - y) / kh;
+		int kpx = (int)((float)(px - x) / kw);
+		int kpy = (int)((float)(py - y) / kh);
+		if (kpx < 0 || kpx >= layout_right.cols) return MREMU_KEY_NONE;
+		if (kpy < 0 || kpy >= layout_right.rows) return MREMU_KEY_NONE;
 
 		if ((kpx == 0 || kpx == 2) && (kpy == 0 || kpy == 3))
 			return key_map_right[kpy][kpx];
-		
 
 		{
-			kpy = std::floor((float(py - y) - kh / 2.f) / kh);
+			float local_y = (float)(py - y);
+			kpy = (int)std::floor((local_y - kh / 2.f) / kh);
 
 			if (kpy >= 0 && kpy < 3 && !(std::abs(kpx - 1) == 1 && std::abs(kpy - 1) == 1))
 				return key_map_right[kpy][kpx];
 		}
 	}
-	
+
 	return MREMU_KEY_NONE;
 }
 
@@ -346,27 +352,43 @@ const char16_t* keys_marks_right[3][3] = {
 };
 
 void Keyboard::update_resize(int win_w, int win_h) {
-	int screen_x = screen->getPosition().x;
-	int screen_y = screen->getPosition().y;
-	int screen_w = screen->getScale().x * screen->getTextureRect().width;
-	int screen_h = screen->getScale().y * screen->getTextureRect().height;
+	int screen_x = (int)screen->getPosition().x;
+	int screen_y = (int)screen->getPosition().y;
+	int screen_w = (int)(screen->getScale().x * screen->getTextureRect().width);
+	int screen_h = (int)(screen->getScale().y * screen->getTextureRect().height);
 
 	sf::IntRect left, right;
-	if (win_h - screen_h > win_w - screen_w) { //bottom
-		auto size = size_by_aspect_ratio(win_w, win_h - screen_h, 6.f / 4.f);
-		int x = (win_w - size.x) / 2, y = screen_y + screen_h;
-		left = { x, y, size.x / 2 + 1, size.y };
-		right = { x + size.x / 2, y, size.x / 2, size.y };
+	// 强制走「屏幕下方横排」：手机直板造型，数字键 + D-pad 永远在屏幕下边，
+	// 不再出现「方向键在屏幕右侧」的巨宽布局。
+	// ratio = 宽 / 高 = 3 / 4 → 每个键区都是窄高的格子。
+	{
+		auto size = size_by_aspect_ratio(win_w, win_h - screen_h, 3.f / 4.f);
+		int x = (win_w - size.x) / 2, y = screen_y + screen_h + 10; // +10 padding，和外壳的通话/OK装饰错开
+		left  = { x,             y, size.x / 2 + 1, size.y };
+		right = { x + size.x / 2, y, size.x / 2,     size.y };
 	}
-	else {
-		auto size = size_by_aspect_ratio((win_w - screen_w) / 2, win_h, 3.f / 4.f);
-		int y = win_h - size.y;
-		left = { (screen_x - size.x) / 2, y, size.x, size.y };
-		right = { screen_x + screen_w, y, size.x, size.y };
-	}
+
+	// —— 控制键格尺寸：手机按键不能巨大。最大单格 宽 110 / 高 46（紧凑好看）。
+	const float MAX_KW = 110.f;
+	const float MAX_KH = 46.f;
+
 
 	{
 		int w = left.width, h = left.height;
+
+		float kw = std::min(MAX_KW, (float)(w - 1) / 3.f);
+		float kh = std::min(MAX_KH, (float)(h - 1) / 4.f);
+		int draw_w = (int)(kw * 3.f + 1.f);
+		int draw_h = (int)(kh * 4.f + 1.f);
+		int off_x  = (w - draw_w) / 2;
+		int off_y  = (h - draw_h) / 2;
+		// 保存给 find_key_by_pos 做命中（保持单源）
+		layout_left.kw    = kw;
+		layout_left.kh    = kh;
+		layout_left.cols  = 3;
+		layout_left.rows  = 4;
+		layout_left.off_x = off_x;
+		layout_left.off_y = off_y;
 
 		frontend_layer_left.create(w, h);
 		frontend_layer_left.clear(sf::Color::Transparent);
@@ -374,23 +396,20 @@ void Keyboard::update_resize(int win_w, int win_h) {
 		sp_left = sf::Sprite(frontend_layer_left.getTexture());
 		sp_left.setPosition((float)left.left, (float)left.top);
 
-		float kw = (float)(w - 1) / 3.f;
-		float kh = (float)(h - 1) / 4.f;
-
 		int font_scale = std::max<int>((int)(kw / 16.f), 1);
 
 		std::vector<sf::Vertex> lines;
 
 		for (int ix = 0; ix < 4; ++ix) {
-			float x = (float)ix * kw;
-			lines.push_back(sf::Vertex(sf::Vector2f(x + 1, 0.f)));
-			lines.push_back(sf::Vertex(sf::Vector2f(x + 1, (float)h)));
+			float x = (float)off_x + (float)ix * kw;
+			lines.push_back(sf::Vertex(sf::Vector2f(x + 1.f, (float)off_y)));
+			lines.push_back(sf::Vertex(sf::Vector2f(x + 1.f, (float)off_y + (float)draw_h)));
 		}
 
 		for (int iy = 0; iy < 5; ++iy) {
-			float y = (float)iy * kh;
-			lines.push_back(sf::Vertex(sf::Vector2f(0.f, y)));
-			lines.push_back(sf::Vertex(sf::Vector2f((float)w, y)));
+			float y = (float)off_y + (float)iy * kh;
+			lines.push_back(sf::Vertex(sf::Vector2f((float)off_x,              y)));
+			lines.push_back(sf::Vertex(sf::Vector2f((float)off_x + (float)draw_w, y)));
 		}
 
 		for (int iy = 0; iy < 4; ++iy)
@@ -401,8 +420,8 @@ void Keyboard::update_resize(int win_w, int win_h) {
 					(float)(sp.getTextureRect().width  / 2),
 					(float)(sp.getTextureRect().height / 2));
 				sp.setPosition(
-					(float)ix * kw + kw / 2.f,
-					(float)iy * kh + kh / 2.f);
+					(float)off_x + (float)ix * kw + kw / 2.f,
+					(float)off_y + (float)iy * kh + kh / 2.f);
 				sp.setScale((float)font_scale, (float)font_scale);
 				frontend_layer_left.draw(sp);
 			}
@@ -417,14 +436,29 @@ void Keyboard::update_resize(int win_w, int win_h) {
 	{
 		int w = right.width, h = right.height;
 
+		// D-pad 网格（3 列 × 4 行，但视觉上是 ↑/←OK→/↓/-/删除 这种方向排布）
+		// 高度稍矮一点（36 单格上限更紧凑），宽度和数字一致
+		const float MAX_KW_R = 105.f;
+		const float MAX_KH_R = 40.f;
+		float kw = std::min(MAX_KW_R, (float)(w - 1) / 3.f);
+		float kh = std::min(MAX_KH_R, (float)(h - 1) / 4.f);
+		int draw_w = (int)(kw * 3.f + 1.f);
+		int draw_h = (int)(kh * 4.f + 1.f);
+		int off_x  = (w - draw_w) / 2;
+		int off_y  = (h - draw_h) / 2;
+		// 保存给 find_key_by_pos
+		layout_right.kw    = kw;
+		layout_right.kh    = kh;
+		layout_right.cols  = 3;
+		layout_right.rows  = 4;
+		layout_right.off_x = off_x;
+		layout_right.off_y = off_y;
+
 		frontend_layer_right.create(w, h);
 		frontend_layer_right.clear(sf::Color::Transparent);
 
 		sp_right = sf::Sprite(frontend_layer_right.getTexture());
 		sp_right.setPosition((float)right.left, (float)right.top);
-
-		float kw = (float)(w - 1) / 3.f;
-		float kh = (float)(h - 1) / 4.f;
 
 		int font_scale = std::max<int>((int)(kw / 16.f), 1);
 
@@ -432,8 +466,8 @@ void Keyboard::update_resize(int win_w, int win_h) {
 
 		for (int iy = 0; iy < 3; ++iy)
 			for (int ix = 0; ix < 3; ++ix) {
-				float x = (float)ix * kw + 1.f;
-				float y = (float)iy * kh;
+				float x = (float)off_x + (float)ix * kw + 1.f;
+				float y = (float)off_y + (float)iy * kh;
 				if (!(std::abs(ix - 1) == 1 && std::abs(iy - 1)) == 1)
 					y += kh / 2.f;
 				else if (iy == 2)

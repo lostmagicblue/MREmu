@@ -75,6 +75,19 @@ public:
 	sf::Sprite sp_left;
 	sf::Sprite sp_right;
 
+	// 「实际点击有效网格」的布局参数（和 update_resize 里的 clamp/offset 一致，
+	// 供 find_key_by_pos 命中检测使用，避免点击错位）。
+	struct GridLayout {
+		float kw = 0.f;        // 单格宽
+		float kh = 0.f;        // 单格高
+		int   cols = 3;        // 列数（3 固定）
+		int   rows = 4;        // 行数（left=4, right=4 固定，right 画时只用到前3行）
+		int   off_x = 0;       // 网格在 sp 内的 x 偏移（居中用）
+		int   off_y = 0;       // 网格在 sp 内的 y 偏移（居中用）
+	};
+	GridLayout layout_left;
+	GridLayout layout_right;
+
 	sf::Sprite *screen;
 
 	bool event(sf::Event& event);
